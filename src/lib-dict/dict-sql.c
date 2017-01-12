@@ -478,6 +478,7 @@ sql_dict_lookup_async_callback(struct sql_result *sql_result,
 			       struct sql_dict_lookup_context *ctx)
 {
 	struct dict_lookup_result result;
+	const char *values[2] = { NULL, NULL };
 
 	memset(&result, 0, sizeof(result));
 	result.ret = sql_result_next_row(sql_result);
@@ -491,6 +492,9 @@ sql_dict_lookup_async_callback(struct sql_result *sql_result,
 			   "not found", which is probably what is usually
 			   wanted. */
 			result.ret = 0;
+		} else {
+			values[0] = result.value;
+			result.values = values;
 		}
 	}
 	ctx->callback(&result, ctx->context);
