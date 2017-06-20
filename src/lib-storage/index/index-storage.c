@@ -177,7 +177,7 @@ int index_storage_mailbox_exists_full(struct mailbox *box, const char *subdir,
 {
 	struct stat st;
 	enum mail_error error;
-	const char *path, *path2;
+	const char *path, *path2, *index_path;
 	int ret;
 
 	/* see if it's selectable */
@@ -194,6 +194,18 @@ int index_storage_mailbox_exists_full(struct mailbox *box, const char *subdir,
 		*existence_r = MAILBOX_EXISTENCE_NONE;
 		return 0;
 	}
+
+	ret = subdir != NULL || !box->list->set.iter_from_index_dir ? 0 :
+		mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX, &index_path);
+	if (ret > 0 && strcmp(path, index_path) != 0) {
+		/* index directory is different - prefer looking it up first
+		   since it might be on a faster storage. */
+		if (stat(index_path, &st) == 0) {
+			*existence_r = MAILBOX_EXISTENCE_SELECT;
+			return 0;
+		}
+	}
+
 	if (subdir != NULL)
 		path = t_strconcat(path, "/", subdir, NULL);
 	if (stat(path, &st) == 0) {
