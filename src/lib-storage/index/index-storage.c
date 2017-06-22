@@ -199,7 +199,11 @@ int index_storage_mailbox_exists_full(struct mailbox *box, const char *subdir,
 		mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX, &index_path);
 	if (ret > 0 && strcmp(path, index_path) != 0) {
 		/* index directory is different - prefer looking it up first
-		   since it might be on a faster storage. */
+		   since it might be on a faster storage. since the directory
+		   itself exists also for \NoSelect mailboxes, we'll need to
+		   check the dovecot.index.log existence. */
+		index_path = t_strconcat(index_path, "/", box->index_prefix,
+					 ".log", NULL);
 		if (stat(index_path, &st) == 0) {
 			*existence_r = MAILBOX_EXISTENCE_SELECT;
 			return 0;
@@ -568,7 +572,7 @@ int index_storage_mailbox_create(struct mailbox *box, bool directory)
 	enum mailbox_list_path_type type;
 	enum mailbox_existence existence;
 	bool create_parent_dir;
-	int ret;
+	int ret, ret2;
 
 	type = directory ? MAILBOX_LIST_PATH_TYPE_DIR :
 		MAILBOX_LIST_PATH_TYPE_MAILBOX;
@@ -592,6 +596,19 @@ int index_storage_mailbox_create(struct mailbox *box, bool directory)
 
 	if ((ret = mailbox_mkdir(box, path, type)) < 0)
 		return -1;
+	if (box->list->set.iter_from_index_dir) {
+		/* need to also create the directory to index path or
+		   iteration won't find it. */
+		if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX, &path) < 0)
+			i_unreached();
+		if ((ret2 = mailbox_mkdir(box, path, type)) < 0)
+			return -1;
+		if (ret == 0 && ret2 > 0) {
+			/* finish partial creation: existed in mail directory,
+			   but not in index directory. */
+			ret = 1;
+		}
+	}
 	mailbox_refresh_permissions(box);
 	if (ret == 0) {
 		/* directory already exists */

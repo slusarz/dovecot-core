@@ -247,7 +247,7 @@ fs_list_get_storage_path(struct fs_list_iterate_context *ctx,
 		if (ctx->ctx.list->set.iter_from_index_dir &&
 		    ctx->ctx.list->set.mailbox_dir_name[0] != '\0') {
 			/* index root doesn't have the mailboxes-dir yet. */
-			path = t_strconcat(path,
+			root = t_strconcat(root, "/",
 				ctx->ctx.list->set.mailbox_dir_name, NULL);
 		}
 		path = *path == '\0' ? root :
