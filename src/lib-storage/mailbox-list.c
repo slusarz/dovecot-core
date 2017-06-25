@@ -1488,9 +1488,15 @@ int mailbox_list_mailbox(struct mailbox_list *list, const char *name,
 		return mailbox_list_iter_deinit(&iter);
 	}
 
-	rootdir = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_MAILBOX);
-	if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_DIR, &path) <= 0)
-		i_unreached();
+	if (!list->set.iter_from_index_dir) {
+		rootdir = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_MAILBOX);
+		if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_DIR, &path) <= 0)
+			i_unreached();
+	} else {
+		rootdir = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_INDEX);
+		if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_INDEX, &path) <= 0)
+			i_unreached();
+	}
 
 	fname = strrchr(path, '/');
 	if (fname == NULL) {
