@@ -266,6 +266,8 @@ int mailbox_list_delete_symlink(struct mailbox_list *list, const char *name);
 const char * ATTR_NOWARN_UNUSED_RESULT
 mailbox_list_get_last_error(struct mailbox_list *list,
 			    enum mail_error *error_r);
+/* Wrapper for mailbox_list_get_last_error() */
+enum mail_error mailbox_list_get_last_mail_error(struct mailbox_list *list);
 
 /* Create a fs based on the settings in the given mailbox_list. */
 int mailbox_list_init_fs(struct mailbox_list *list, const char *driver,

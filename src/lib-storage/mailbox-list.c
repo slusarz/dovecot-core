@@ -1787,6 +1787,11 @@ const char *mailbox_list_get_last_error(struct mailbox_list *list,
 		"Unknown internal list error";
 }
 
+enum mail_error mailbox_list_get_last_mail_error(struct mailbox_list *list)
+{
+	return list->error;
+}
+
 void mailbox_list_clear_error(struct mailbox_list *list)
 {
 	i_free_and_null(list->error_string);
