@@ -173,7 +173,6 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 	list->set.alt_dir_nocheck = set->alt_dir_nocheck;
 	list->set.index_control_use_maildir_name =
 		set->index_control_use_maildir_name;
-	list->set.iter_from_index_dir = set->iter_from_index_dir;
 
 	if (*set->mailbox_dir_name == '\0')
 		list->set.mailbox_dir_name = "";
@@ -342,9 +341,6 @@ mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 		else if (strcmp(key, "FULLDIRNAME") == 0) {
 			set_r->index_control_use_maildir_name = TRUE;
 			dest = &set_r->maildir_name;
-		} else if (strcmp(key, "ITERINDEX") == 0) {
-			set_r->iter_from_index_dir = TRUE;
-			continue;
 		} else {
 			*error_r = t_strdup_printf("Unknown setting: %s", key);
 			return -1;
@@ -1488,15 +1484,9 @@ int mailbox_list_mailbox(struct mailbox_list *list, const char *name,
 		return mailbox_list_iter_deinit(&iter);
 	}
 
-	if (!list->set.iter_from_index_dir) {
-		rootdir = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_MAILBOX);
-		if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_DIR, &path) <= 0)
-			i_unreached();
-	} else {
-		rootdir = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_INDEX);
-		if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_INDEX, &path) <= 0)
-			i_unreached();
-	}
+	rootdir = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_MAILBOX);
+	if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_DIR, &path) <= 0)
+		i_unreached();
 
 	fname = strrchr(path, '/');
 	if (fname == NULL) {

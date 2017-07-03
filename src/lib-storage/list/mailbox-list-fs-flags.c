@@ -118,13 +118,12 @@ int fs_list_get_mailbox_flags(struct mailbox_list *list,
 
 	*flags_r = 0;
 
-	if (*list->set.maildir_name != '\0' && !list->set.iter_from_index_dir) {
+	if (*list->set.maildir_name != '\0') {
 		/* maildir_name is set: the code is common for all
 		   storage types */
 		return list_is_maildir_mailbox(list, dir, fname, type, flags_r);
 	}
-	if (!list->set.iter_from_index_dir &&
-	    list->v.is_internal_name != NULL &&
+	if (list->v.is_internal_name != NULL &&
 	    list->v.is_internal_name(list, fname)) {
 		/* skip internal dirs */
 		*flags_r |= MAILBOX_NOSELECT;
@@ -196,7 +195,7 @@ int fs_list_get_mailbox_flags(struct mailbox_list *list,
 
 	if ((list->flags & MAILBOX_LIST_FLAG_MAILBOX_FILES) != 0) {
 		*flags_r |= STAT_GET_MARKED_FILE(st);
-	} else if (list->v.is_internal_name == NULL || list->set.iter_from_index_dir) {
+	} else if (list->v.is_internal_name == NULL) {
 		/* link count < 2 can happen with filesystems that don't
 		   support link counts. we'll just ignore them for now.. */
 		if (st.st_nlink == 2)
