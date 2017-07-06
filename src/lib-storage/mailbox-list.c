@@ -783,6 +783,11 @@ void mailbox_list_destroy(struct mailbox_list **_list)
 		mailbox_tree_deinit(&list->subscriptions);
 	if (list->changelog != NULL)
 		mailbox_log_free(&list->changelog);
+
+	if (array_is_created(&list->error_stack)) {
+		i_assert(array_count(&list->error_stack) == 0);
+		array_free(&list->error_stack);
+	}
 	list->v.deinit(list);
 }
 
@@ -1884,6 +1889,29 @@ bool mailbox_list_set_error_from_errno(struct mailbox_list *list)
 
 	mailbox_list_set_error(list, error, error_string);
 	return TRUE;
+}
+
+void mailbox_list_last_error_push(struct mailbox_list *list)
+{
+	struct mail_storage_error *err;
+
+	if (!array_is_created(&list->error_stack))
+		i_array_init(&list->error_stack, 2);
+	err = array_append_space(&list->error_stack);
+	err->error_string = i_strdup(list->error_string);
+	err->error = list->error;
+}
+
+void mailbox_list_last_error_pop(struct mailbox_list *list)
+{
+	unsigned int count = array_count(&list->error_stack);
+	const struct mail_storage_error *err =
+		array_idx(&list->error_stack, count-1);
+
+	i_free(list->error_string);
+	list->error_string = err->error_string;
+	list->error = err->error;
+	array_delete(&list->error_stack, count-1, 1);
 }
 
 int mailbox_list_init_fs(struct mailbox_list *list, const char *driver,
