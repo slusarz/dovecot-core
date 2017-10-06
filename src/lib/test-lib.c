@@ -35,6 +35,7 @@ int main(void)
 		test_istream_failure_at,
 		test_istream_seekable,
 		test_istream_tee,
+		test_istream_try,
 		test_istream_unix,
 		test_json_parser,
 		test_json_tree,
