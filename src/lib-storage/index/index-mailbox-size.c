@@ -48,6 +48,7 @@ struct mailbox_vsize_update {
 	char *lock_path;
 	int lock_fd;
 	struct file_lock *lock;
+	bool skip_write;
 	bool rebuild;
 	bool written;
 	bool finish_in_background;
@@ -236,7 +237,7 @@ void index_mailbox_vsize_update_deinit(struct mailbox_vsize_update **_update)
 
 	*_update = NULL;
 
-	if (update->lock != NULL || update->rebuild)
+	if ((update->lock != NULL || update->rebuild) && !update->skip_write)
 		index_mailbox_vsize_update_write(update);
 	if (update->lock != NULL) {
 		if (unlink(update->lock_path) < 0)
@@ -466,6 +467,10 @@ void index_mailbox_vsize_update_appends(struct mailbox *box)
 	struct mailbox_status status;
 
 	update = index_mailbox_vsize_update_init(box);
+	if (update->rebuild) {
+		/* The vsize header doesn't exist. Don't create it. */
+		update->skip_write = TRUE;
+	}
 
 	/* update here only if we don't need to rebuild the whole vsize. */
 	index_mailbox_vsize_check_rebuild(update);
