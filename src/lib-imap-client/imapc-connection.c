@@ -1671,12 +1671,12 @@ static int imapc_connection_ssl_init(struct imapc_connection *conn)
 	return 0;
 }
 
-static void imapc_connection_connected(struct imapc_connection *conn)
+static int imapc_connection_connected(struct imapc_connection *conn)
 {
 	const struct ip_addr *ip = &conn->ips[conn->prev_connect_idx];
 	int err;
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+
+	i_assert(conn->io == NULL);
 
 	err = net_geterror(conn->fd);
 	if (err != 0) {
@@ -1684,14 +1684,17 @@ static void imapc_connection_connected(struct imapc_connection *conn)
 			"connect(%s, %u) failed: %s",
 			net_ip2addr(ip), conn->client->set.port,
 			strerror(err)), conn->client->set.connect_retry_interval_msecs, TRUE);
-		return;
+		return -1;
 	}
 	conn->io = io_add(conn->fd, IO_READ, imapc_connection_input, conn);
+	o_stream_set_flush_callback(conn->output, imapc_connection_output,
+				    conn);
 
 	if (conn->client->set.ssl_mode == IMAPC_CLIENT_SSL_MODE_IMMEDIATE) {
 		if (imapc_connection_ssl_init(conn) < 0)
 			imapc_connection_disconnect(conn);
 	}
+	return imapc_connection_output(conn);
 }
 
 static void imapc_connection_timeout(struct imapc_connection *conn)
@@ -1788,9 +1791,9 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 				       &conn->input, &conn->output);
 	}
 
-	o_stream_set_flush_callback(conn->output, imapc_connection_output,
+	o_stream_set_flush_pending(conn->output, TRUE);
+	o_stream_set_flush_callback(conn->output, imapc_connection_connected,
 				    conn);
-	conn->io = io_add(fd, IO_WRITE, imapc_connection_connected, conn);
 	conn->parser = imap_parser_create(conn->input, NULL,
 					  conn->client->set.max_line_length);
 	conn->to = timeout_add(conn->client->set.connect_timeout_msecs,
