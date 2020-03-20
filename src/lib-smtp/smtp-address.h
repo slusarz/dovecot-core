@@ -192,15 +192,14 @@ smtp_address_equals(const struct smtp_address *address1,
 static inline bool ATTR_NULL(1) ATTR_PURE
 smtp_address_isnull(const struct smtp_address *address)
 {
-	return (address == NULL || address->localpart == NULL ||
-		*address->localpart == '\0');
+	return (address == NULL || address->localpart == NULL);
 }
 
 static inline bool ATTR_NULL(1) ATTR_PURE
 smtp_address_is_broken(const struct smtp_address *address)
 {
 	return (address != NULL &&
-		(address->localpart == NULL || *address->localpart == '\0') &&
+		smtp_address_isnull(address) &&
 		(address->raw != NULL && *address->raw != '\0'));
 }
 
