@@ -14,6 +14,7 @@
 #define BOUNDARY_END_MAX_LEN (BOUNDARY_STRING_MAX_LEN + 2 + 2)
 
 #define MESSAGE_PARSER_DEFAULT_MAX_NESTED_MIME_PARTS 100
+#define MESSAGE_PARSER_DEFAULT_MAX_TOTAL_MIME_PARTS 10000
 
 struct message_boundary {
 	struct message_boundary *next;
@@ -31,10 +32,12 @@ struct message_parser_ctx {
 	struct message_part *parts, *part;
 	const char *broken_reason;
 	unsigned int nested_parts_count;
+	unsigned int total_parts_count;
 
 	enum message_header_parser_flags hdr_flags;
 	enum message_parser_flags flags;
 	unsigned int max_nested_mime_parts;
+	unsigned int max_total_mime_parts;
 
 	char *last_boundary;
 	struct message_boundary *boundaries;
@@ -211,7 +214,9 @@ message_part_append(struct message_parser_ctx *ctx)
 
 	ctx->part = part;
 	ctx->nested_parts_count++;
+	ctx->total_parts_count++;
 	i_assert(ctx->nested_parts_count < ctx->max_nested_mime_parts);
+	i_assert(ctx->total_parts_count <= ctx->max_total_mime_parts);
 }
 
 static void message_part_finish(struct message_parser_ctx *ctx)
@@ -293,6 +298,12 @@ boundary_line_find(struct message_parser_ctx *ctx,
 
 	if (data[0] != '-' || data[1] != '-') {
 		/* not a boundary, just skip this line */
+		return -1;
+	}
+
+	if (ctx->total_parts_count >= ctx->max_total_mime_parts) {
+		/* can't add any more MIME parts. just stop trying to find
+		   more boundaries. */
 		return -1;
 	}
 
@@ -1125,6 +1136,8 @@ message_parser_init_int(struct istream *input,
 	ctx->flags = flags;
 	ctx->max_nested_mime_parts =
 		MESSAGE_PARSER_DEFAULT_MAX_NESTED_MIME_PARTS;
+	ctx->max_total_mime_parts =
+		MESSAGE_PARSER_DEFAULT_MAX_TOTAL_MIME_PARTS;
 	ctx->input = input;
 	i_stream_ref(input);
 	return ctx;
@@ -1142,6 +1155,7 @@ message_parser_init(pool_t part_pool, struct istream *input,
 	ctx->parts = ctx->part = p_new(part_pool, struct message_part, 1);
 	ctx->next_part = &ctx->part->children;
 	ctx->parse_next_block = parse_next_header_init;
+	ctx->total_parts_count = 1;
 	i_array_init(&ctx->next_part_stack, 4);
 	return ctx;
 }
