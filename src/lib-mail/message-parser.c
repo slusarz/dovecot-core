@@ -10,7 +10,8 @@
 
 /* RFC-2046 requires boundaries are max. 70 chars + "--" prefix + "--" suffix.
    We'll add a bit more just in case. */
-#define BOUNDARY_END_MAX_LEN (70 + 2 + 2 + 10)
+#define BOUNDARY_STRING_MAX_LEN (70 + 10)
+#define BOUNDARY_END_MAX_LEN (BOUNDARY_STRING_MAX_LEN + 2 + 2)
 
 struct message_boundary {
 	struct message_boundary *next;
@@ -526,8 +527,10 @@ static void parse_content_type(struct message_parser_ctx *ctx,
 	rfc2231_parse(&parser, &results);
 	for (; *results != NULL; results += 2) {
 		if (strcasecmp(results[0], "boundary") == 0) {
+			/* truncate excessively long boundaries */
 			ctx->last_boundary =
-				p_strdup(ctx->parser_pool, results[1]);
+				p_strndup(ctx->parser_pool, results[1],
+					  BOUNDARY_STRING_MAX_LEN);
 			break;
 		}
 	}
