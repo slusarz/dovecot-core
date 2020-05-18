@@ -184,6 +184,11 @@ static int ntlmssp_check_buffer(const struct ntlmssp_buffer *buffer,
 	if (length == 0 && space == 0)
 		return 1;
 
+	if (length > data_size) {
+		*error = "buffer length out of bounds";
+		return FALSE;
+	}
+
 	if (offset >= data_size) {
 		*error = "buffer offset out of bounds";
 		return 0;
