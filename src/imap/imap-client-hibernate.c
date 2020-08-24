@@ -40,8 +40,8 @@ static int imap_hibernate_handshake(int fd, const char *path)
 	return -1;
 }
 
-static void imap_hibernate_write_cmd(struct client *client, string_t *cmd,
-				     const buffer_t *state, int fd_notify)
+void imap_hibernate_write_cmd(struct client *client, string_t *cmd,
+			      const buffer_t *state, int fd_notify)
 {
 	struct stat peer_st;
 	const char *tag;
