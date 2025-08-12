@@ -10,6 +10,7 @@
 #include "process-title.h"
 #include "restrict-access.h"
 #include "randgen.h"
+#include "lib-mail.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -189,6 +190,7 @@ void lib_init(void)
 	lib_open_non_stdio_dev_null();
 	lib_event_init();
 	event_filter_init();
+	lib_mail_init();
 
 	/* Default to clean exit. Otherwise there would be too many accidents
 	   with e.g. command line parsing errors that try to return instead
@@ -215,6 +217,7 @@ void lib_deinit(void)
 	event_filter_deinit();
 	data_stack_deinit_event();
 	lib_event_deinit();
+	lib_mail_deinit();
 	restrict_access_deinit();
 	i_close_fd(&dev_null_fd);
 	data_stack_deinit();

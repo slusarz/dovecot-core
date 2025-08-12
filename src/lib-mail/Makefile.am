@@ -7,6 +7,11 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-smtp
 
 libmail_la_SOURCES = \
+	lib-mail.c \
+	message-body-extractor.c \
+	message-snippet-drivers.c \
+	message-snippet-driver-internal.c \
+	message-snippet-driver-ollama.c \
 	istream-attachment-connector.c \
 	istream-attachment-extractor.c \
 	istream-binary-converter.c \
@@ -45,6 +50,9 @@ noinst_HEADERS = \
 	message-parser-private.h
 
 headers = \
+	lib-mail.h \
+	message-body-extractor.h \
+	message-snippet-driver.h \
 	istream-attachment-connector.h \
 	istream-attachment-extractor.h \
 	istream-binary-converter.h \

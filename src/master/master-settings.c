@@ -212,6 +212,13 @@ static const struct setting_define master_setting_defines[] = {
 	  .offset = offsetof(struct master_settings, services),
 	  .filter_array_field_name = "service_name", },
 
+	DEF(STR, message_snippet_driver),
+	DEF(STR, message_snippet_ollama_url),
+	DEF(STR, message_snippet_ollama_model),
+	DEF(STR_HIDDEN, message_snippet_ollama_prompt),
+	DEF(SIZE, message_snippet_ollama_max_input_size),
+	DEF(TIME, message_snippet_ollama_timeout),
+
 	SETTING_DEFINE_LIST_END
 };
 
@@ -240,7 +247,16 @@ static const struct master_settings master_default_settings = {
 	.first_valid_gid = 1,
 	.last_valid_gid = 0,
 
-	.services = ARRAY_INIT
+	.services = ARRAY_INIT,
+
+	.message_snippet_driver = "internal",
+	.message_snippet_ollama_url = "",
+	.message_snippet_ollama_model = "llama3",
+	.message_snippet_ollama_prompt = "Summarize the following email text. "
+		"Output ONLY the summarized text, without any introductory phrases like "
+		"\"Here is a summary:\".",
+	.message_snippet_ollama_max_input_size = 131072,
+	.message_snippet_ollama_timeout = 5
 };
 static const struct setting_keyvalue master_default_settings_keyvalue[] = {
 	{ "protocols", "" },

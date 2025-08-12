@@ -28,6 +28,14 @@ struct master_settings {
 	ARRAY_TYPE(const_string) services;
 
 	ARRAY_TYPE(service_settings) parsed_services;
+
+	/* message snippet settings */
+	const char *message_snippet_driver;
+	const char *message_snippet_ollama_url;
+	const char *message_snippet_ollama_model;
+	const char *message_snippet_ollama_prompt;
+	uoff_t message_snippet_ollama_max_input_size;
+	unsigned int message_snippet_ollama_timeout;
 };
 
 extern const struct setting_parser_info master_setting_parser_info;
