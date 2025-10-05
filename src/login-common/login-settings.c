@@ -26,6 +26,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(TIME_MSECS, login_proxy_timeout),
 	DEF(UINT, login_proxy_max_reconnects),
 	DEF(TIME, login_proxy_max_disconnect_delay),
+	DEF(UINT, login_proxy_min_disconnect_count),
 	DEF(STR, login_proxy_rawlog_dir),
 	DEF(STR_HIDDEN, login_socket_path),
 
@@ -60,6 +61,7 @@ static const struct login_settings login_default_settings = {
 #else
 	.login_proxy_max_disconnect_delay = 0,
 #endif
+	.login_proxy_min_disconnect_count = 10,
 	.login_proxy_rawlog_dir = "",
 	.login_socket_path = "",
 

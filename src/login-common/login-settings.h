@@ -14,6 +14,7 @@ struct login_settings {
 	unsigned int login_proxy_timeout;
 	unsigned int login_proxy_max_reconnects;
 	unsigned int login_proxy_max_disconnect_delay;
+	unsigned int login_proxy_min_disconnect_count;
 	const char *login_proxy_rawlog_dir;
 	const char *login_socket_path;
 	const char *ssl; /* for settings check */

@@ -703,6 +703,11 @@ static unsigned int login_proxy_delay_disconnect(struct login_proxy *proxy)
 		/* delaying is disabled */
 		return 0;
 	}
+	if (rec->num_disconnects_since_ts <
+	    proxy->client->set->login_proxy_min_disconnect_count) {
+		/* not enough disconnects to start delaying */
+		return 0;
+	}
 	max_conns = rec->num_proxying_connections + rec->num_disconnects_since_ts;
 	max_disconnects_per_sec = (max_conns + max_delay-1) / max_delay;
 	if (rec->num_disconnects_since_ts <= max_disconnects_per_sec &&
