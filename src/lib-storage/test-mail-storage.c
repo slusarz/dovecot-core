@@ -5,6 +5,9 @@
 #include "test-common.h"
 #include "master-service.h"
 #include "test-mail-storage-common.h"
+#include "mail-storage-private.h"
+#include "index/index-storage.h"
+#include "index/index-mailbox-size.h"
 
 static const struct test_globals {
 	const char *str;
@@ -725,6 +728,64 @@ static void test_mail_parse_human_timestamp_fail(void)
 	test_end();
 }
 
+static void test_vsize_hdr_corruption_fix(void)
+{
+	struct test_mail_storage_ctx *ctx;
+	struct mail_namespace *ns;
+	struct mailbox *box;
+	struct mail_index_view *view;
+	const void *data;
+	size_t size;
+	const char corrupted_hdr[] = "corrupted";
+	struct mailbox_metadata metadata;
+
+	test_begin("vsize header corruption fix");
+
+	ctx = test_mail_storage_init();
+	struct test_mail_storage_settings set = {
+		.driver = "sdbox",
+		.hierarchy_sep = "/",
+	};
+	test_mail_storage_init_user(ctx, &set);
+
+	ns = mail_namespace_find_inbox(ctx->user->namespaces);
+	box = mailbox_alloc(ns->list, "vsize-test", 0);
+	test_assert(mailbox_create(box, NULL, FALSE) == 0);
+	test_assert(mailbox_open(box) == 0);
+	test_assert(mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ) == 0);
+
+	/* write corrupted header */
+	struct mail_index_transaction *trans =
+		mail_index_transaction_begin(box->view,
+					     MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
+	mail_index_update_header_ext(trans, box->vsize_hdr_ext_id, 0,
+				     corrupted_hdr, sizeof(corrupted_hdr));
+	test_assert(mail_index_transaction_commit(&trans) == 0);
+
+	/* close and reopen the box to trigger the fix */
+	mailbox_free(&box);
+	box = mailbox_alloc(ns->list, "vsize-test", 0);
+	test_assert(mailbox_open(box) == 0);
+	index_mailbox_vsize_update_appends(box);
+
+	/* verify the fix */
+	(void)mail_index_refresh(box->index);
+	view = mail_index_view_open(box->index);
+	mail_index_get_header_ext(view, box->vsize_hdr_ext_id, &data, &size);
+
+	test_assert(size == sizeof(struct mailbox_index_vsize));
+	struct mailbox_index_vsize empty_hdr;
+	i_zero(&empty_hdr);
+	test_assert(memcmp(data, &empty_hdr, sizeof(empty_hdr)) == 0);
+
+	mail_index_view_close(&view);
+	mailbox_free(&box);
+	test_mail_storage_deinit_user(ctx);
+	test_mail_storage_deinit(&ctx);
+
+	test_end();
+}
+
 int main(int argc, char **argv)
 {
 	int ret;
@@ -737,6 +798,7 @@ int main(int argc, char **argv)
 		test_mail_parse_human_timestamp,
 		test_mail_parse_human_timestamp_time_interval,
 		test_mail_parse_human_timestamp_fail,
+		test_vsize_hdr_corruption_fix,
 		NULL
 	};
 

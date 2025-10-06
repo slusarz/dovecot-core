@@ -48,6 +48,7 @@ struct mailbox_vsize_update {
 	bool lock_failed;
 	bool skip_write;
 	bool rebuild;
+	bool hdr_corrupted;
 	bool written;
 	bool finish_in_background;
 };
@@ -75,6 +76,7 @@ static void vsize_header_refresh(struct mailbox_vsize_update *update)
 			mailbox_set_critical(update->box,
 				"vsize-hdr has invalid size: %zu",
 				size);
+			update->hdr_corrupted = TRUE;
 		}
 		update->rebuild = TRUE;
 		i_zero(&update->vsize_hdr);
@@ -162,7 +164,8 @@ bool index_mailbox_vsize_update_wait_lock(struct mailbox_vsize_update *update)
 
 bool index_mailbox_vsize_want_updates(struct mailbox_vsize_update *update)
 {
-	return update->vsize_hdr.highest_uid > 0;
+	return update->vsize_hdr.highest_uid > 0 ||
+		update->rebuild;
 }
 
 static void
@@ -393,7 +396,8 @@ int index_mailbox_get_virtual_size(struct mailbox *box,
 
 	mailbox_get_open_status(box, STATUS_MESSAGES | STATUS_UIDNEXT, &status);
 	update = index_mailbox_vsize_update_init(box);
-	if (update->vsize_hdr.highest_uid + 1 == status.uidnext &&
+	if (!update->rebuild &&
+	    update->vsize_hdr.highest_uid + 1 == status.uidnext &&
 	    update->vsize_hdr.message_count == status.messages) {
 		/* up to date */
 		metadata_r->virtual_size = update->vsize_hdr.vsize;
@@ -477,7 +481,7 @@ void index_mailbox_vsize_update_appends(struct mailbox *box)
 	struct mailbox_status status;
 
 	update = index_mailbox_vsize_update_init(box);
-	if (update->rebuild) {
+	if (update->rebuild && !update->hdr_corrupted) {
 		/* The vsize header doesn't exist. Don't create it. */
 		update->skip_write = TRUE;
 	}
@@ -490,7 +494,8 @@ void index_mailbox_vsize_update_appends(struct mailbox *box)
 		   don't want to do this with imapc, because it could trigger
 		   a remote STATUS (UIDNEXT) call. */
 		mailbox_get_open_status(update->box, STATUS_UIDNEXT, &status);
-		if (update->vsize_hdr.highest_uid + 1 != status.uidnext &&
+		if ((update->rebuild ||
+		     update->vsize_hdr.highest_uid + 1 != status.uidnext) &&
 		    index_mailbox_vsize_update_try_lock(update)) {
 			struct event_reason *reason =
 				event_reason_begin("mailbox:vsize");
