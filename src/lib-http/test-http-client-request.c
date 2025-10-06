@@ -85,10 +85,46 @@ static void test_http_client_request_headers(void)
 	test_end();
 }
 
+static void test_http_client_request_stats_unsent(void)
+{
+	struct http_client_settings set;
+	struct http_client *client;
+	struct http_client_request *req;
+	struct http_client_request_stats stats;
+
+	test_begin("http client request stats unsent");
+
+	i_zero(&set);
+	set.max_pipelined_requests = 1;
+	set.max_parallel_connections = 1;
+	set.connect_backoff_time_msecs = 100;
+	set.connect_backoff_max_time_msecs = 1000;
+	set.request_timeout_msecs = 1000;
+
+	client = http_client_init(&set, NULL);
+	req = http_client_request(client, "GET", "localhost", "/",
+				  test_http_client_request_callback, NULL);
+
+	/* submit request, but don't run ioloop so it's not sent */
+	http_client_request_submit(req);
+
+	/* let some time pass */
+	i_sleep_msecs(10);
+
+	http_client_request_get_stats(req, &stats);
+	test_assert(stats.lock_msecs < 1000);
+	test_assert(stats.other_ioloop_msecs < 1000);
+
+	http_client_request_abort(&req);
+	http_client_deinit(&client);
+	test_end();
+}
+
 int main(void)
 {
 	static void (*const test_functions[])(void) = {
 		test_http_client_request_headers,
+		test_http_client_request_stats_unsent,
 		NULL
 	};
 	return test_run(test_functions);

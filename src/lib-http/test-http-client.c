@@ -350,6 +350,73 @@ static void run_http_post(struct http_client *http_client, const char *url_str,
 	http_client_request_submit(http_req);
 }
 
+struct test_stats_context {
+	struct http_client_request *req;
+	bool *finished;
+};
+
+static void
+test_stats_on_failure_callback(const struct http_response *response,
+			       struct test_stats_context *ctx)
+{
+	struct http_client_request_stats stats;
+
+	i_info("test_stats_on_failure_callback: Request failed as expected: %u %s",
+	       response->status, response->reason);
+
+	http_client_request_get_stats(ctx->req, &stats);
+
+	i_info("DNS failure stats: total=%u, 1st_sent=%u, last_sent=%u, "
+	       "http_ioloop=%u, other_ioloop=%u, lock=%u, "
+	       "attempts=%u, send_attempts=%u",
+	       stats.total_msecs, stats.first_sent_msecs, stats.last_sent_msecs,
+	       stats.http_ioloop_msecs, stats.other_ioloop_msecs,
+	       stats.lock_msecs, stats.attempts, stats.send_attempts);
+
+	/* The bug was that lock_msecs was huge. Let's check it's small.
+	   It can be non-zero if other tests are running and using locks.
+	   But it shouldn't be thousands of seconds. Let's say < 5 seconds. */
+	if (stats.lock_msecs > 5000) {
+		i_fatal("stats.lock_msecs is too high: %u", stats.lock_msecs);
+	}
+	if (stats.other_ioloop_msecs > 5000) {
+		i_fatal("stats.other_ioloop_msecs is too high: %u",
+			stats.other_ioloop_msecs);
+	}
+	if (stats.total_msecs > 35000) {
+		/* dns timeout is 30s, so this shouldn't be much more */
+		i_fatal("stats.total_msecs is too high: %u", stats.total_msecs);
+	}
+
+	*ctx->finished = TRUE;
+	i_free(ctx);
+	if (ioloop != NULL)
+		io_loop_stop(ioloop);
+}
+
+static void
+run_test_request_stats_on_failure(struct http_client *http_client)
+{
+	struct http_client_request *http_req;
+	struct test_stats_context *ctx;
+	bool finished = FALSE;
+
+	i_info("--- test: request stats on failure ---");
+
+	ctx = i_new(struct test_stats_context, 1);
+	ctx->finished = &finished;
+
+	http_req = http_client_request(http_client,
+		"GET", "this-host-does-not-exist.dovecot.example.com", "/",
+		test_stats_on_failure_callback, ctx);
+	ctx->req = http_req;
+	http_client_request_submit(http_req);
+
+	while (!finished)
+		io_loop_run(ioloop);
+	i_info("--- test: request stats on failure finished ---");
+}
+
 static bool
 test_event_callback(struct event *event,
 		    enum event_callback_type type,
@@ -447,6 +514,7 @@ int main(int argc, char *argv[])
 
 	switch (argc) {
 	case 1:
+		run_test_request_stats_on_failure(http_client1);
 		run_tests(http_client1);
 		run_tests(http_client2);
 		run_tests(http_client3);
