@@ -3,7 +3,12 @@
 #include "lib.h"
 #include "array.h"
 #include "test-common.h"
+#include "str.h"
+#include "acl-global-file.h"
 #include "acl-api-private.h"
+
+#include <fcntl.h>
+#include <unistd.h>
 
 static void test_acl_rights_sort(void)
 {
@@ -56,10 +61,74 @@ static void test_acl_rights_sort(void)
 	test_end();
 }
 
+static void test_acl_parse_whitespace(void)
+{
+	const char *tmpfname = "tmp-test-acl-ws.tmp";
+	const char *error;
+	/* vpattern, id, rights */
+	const char *line1 = "*\tuser=timo lr\n";
+	const char *line2 = "\"*\" user=timo\t\tlr\n";
+	struct acl_global_file *file;
+	ARRAY_TYPE(acl_rights) rights;
+	const struct acl_rights *right;
+	pool_t pool;
+	int fd;
+
+	test_begin("acl parse whitespace");
+
+	fd = open(tmpfname, O_CREAT | O_TRUNC | O_WRONLY, 0600);
+	if (fd == -1)
+		i_fatal("Cannot create %s: %m", tmpfname);
+	if (write(fd, line1, strlen(line1)) < 0)
+		i_fatal("Cannot write to %s: %m", tmpfname);
+	if (write(fd, line2, strlen(line2)) < 0)
+		i_fatal("Cannot write to %s: %m", tmpfname);
+	i_close_fd(&fd);
+
+	file = acl_global_file_init(tmpfname, 0, NULL);
+	pool = pool_alloconly_create("tmp", 1024);
+	t_array_init(&rights, 4);
+
+	/* test global acl file parsing */
+	test_assert(acl_global_file_refresh(file) == 0);
+	acl_global_file_get(file, "foo", pool, &rights);
+	test_assert(array_count(&rights) == 2);
+
+	right = array_idx(&rights, 0);
+	test_assert_strcmp(acl_rights_get_id(right), "user=timo");
+	test_assert_strcmp(t_strarray_join(right->rights, ","), "lookup,read");
+	test_assert(right->neg_rights == NULL);
+
+	right = array_idx(&rights, 1);
+	test_assert_strcmp(acl_rights_get_id(right), "user=timo");
+	test_assert_strcmp(t_strarray_join(right->rights, ","), "lookup,read");
+	test_assert(right->neg_rights == NULL);
+
+	/* test direct parsing of rights line */
+	array_clear(&rights);
+	test_assert(acl_rights_parse_line("user=timo lr", pool,
+					  array_append_space(&rights),
+					  &error) == 0);
+	test_assert(acl_rights_parse_line("\tuser=timo\t lr", pool,
+					  array_append_space(&rights),
+					  &error) == 0);
+	test_assert(array_count(&rights) == 2);
+	right = array_idx(&rights, 0);
+	test_assert_strcmp(acl_rights_get_id(right), "user=timo");
+	test_assert_strcmp(t_strarray_join(right->rights, ","), "lookup,read");
+
+	/* clean up */
+	acl_global_file_deinit(&file);
+	pool_unref(&pool);
+	i_unlink(tmpfname);
+	test_end();
+}
+
 int main(void)
 {
 	static void (*const test_functions[])(void) = {
 		test_acl_rights_sort,
+		test_acl_parse_whitespace,
 		NULL
 	};
 	return test_run(test_functions);

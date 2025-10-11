@@ -87,14 +87,17 @@ acl_global_file_parse_line(struct acl_global_file_parse_ctx *ctx,
 			*error_r = "Missing '\"'";
 			return -1;
 		}
-		if (line[0] != ' ') {
-			*error_r = "Expecting space after '\"'";
+		if (*line != ' ' && *line != '\t') {
+			*error_r = "Expecting whitespace after '\"'";
 			return -1;
 		}
-		line++;
+		while (*line == ' ' || *line == '\t')
+			line++;
 	} else {
-		p = strchr(line, ' ');
-		if (p == NULL) {
+		p = line;
+		while (*p != ' ' && *p != '\t' && *p != '\0')
+			p++;
+		if (*p == '\0') {
 			*error_r = "Missing ACL rights";
 			return -1;
 		}
@@ -103,7 +106,9 @@ acl_global_file_parse_line(struct acl_global_file_parse_ctx *ctx,
 			return -1;
 		}
 		vpattern = t_strdup_until(line, p);
-		line = p + 1;
+		line = p;
+		while (*line == ' ' || *line == '\t')
+			line++;
 	}
 
 	pright = array_append_space(&ctx->parse_rights);

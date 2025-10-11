@@ -177,19 +177,29 @@ int acl_rights_parse_line(const char *line, pool_t pool,
 	if (*line == '"') {
 		line++;
 		if (str_unescape_next(&line, &id_str) < 0 ||
-		    (line[0] != ' ' && line[0] != '\0')) {
+		    (*line != ' ' && *line != '\t' && *line != '\0')) {
 			*error_r = "Invalid quoted ID";
 			return -1;
 		}
-		if (line[0] == ' ')
+		while (*line == ' ' || *line == '\t')
 			line++;
 	} else {
-		id_str = line;
-		line = strchr(id_str, ' ');
-		if (line == NULL)
+		const char *p;
+
+		while (*line == ' ' || *line == '\t')
+			line++;
+		p = line;
+		while (*p != ' ' && *p != '\t' && *p != '\0')
+			p++;
+		if (*p == '\0') {
+			id_str = line;
 			line = "";
-		else
-			id_str = t_strdup_until(id_str, line++);
+		} else {
+			id_str = t_strdup_until(line, p);
+			line = p;
+			while (*line == ' ' || *line == '\t')
+				line++;
+		}
 	}
 
 	i_zero(rights_r);
