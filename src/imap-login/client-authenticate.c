@@ -192,6 +192,7 @@ int cmd_login(struct imap_client *imap_client, const struct imap_arg *args)
 	struct client *client = &imap_client->common;
 	const char *user, *pass;
 	string_t *plain_login, *base64;
+	int ret;
 
 	/* two arguments: username and password */
 	if (!imap_arg_get_astring(&args[0], &user) ||
@@ -214,6 +215,9 @@ int cmd_login(struct imap_client *imap_client, const struct imap_arg *args)
 
 	base64 = t_buffer_create(MAX_BASE64_ENCODED_SIZE(plain_login->used));
 	base64_encode(plain_login->data, plain_login->used, base64);
-	return imap_client_auth_begin(imap_client, SASL_MECH_NAME_PLAIN,
+	ret = imap_client_auth_begin(imap_client, SASL_MECH_NAME_PLAIN,
 				      str_c(base64));
+	if (ret > 0)
+		io_remove(&client->io);
+	return ret;
 }
