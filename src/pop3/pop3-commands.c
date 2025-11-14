@@ -628,9 +628,10 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 	if ((client->uidl_keymask & UIDL_MD5) != 0) {
 		if (mail_get_special(mail, MAIL_FETCH_HEADER_MD5,
 				     &hdr_md5) < 0) {
-			e_error(client->event,
-				"UIDL: Header MD5 lookup failed: %s",
-				mailbox_get_last_internal_error(mail->box, NULL));
+			if (!mail->expunged)
+				e_error(client->event,
+					"UIDL: Header MD5 lookup failed: %s",
+					mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
 		} else if (hdr_md5[0] == '\0') {
 			e_error(client->event,
@@ -642,9 +643,10 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 	if ((client->uidl_keymask & UIDL_FILE_NAME) != 0) {
 		if (mail_get_special(mail, MAIL_FETCH_STORAGE_ID,
 				     &filename) < 0) {
-			e_error(client->event,
-				"UIDL: File name lookup failed: %s",
-				mailbox_get_last_internal_error(mail->box, NULL));
+			if (!mail->expunged)
+				e_error(client->event,
+					"UIDL: File name lookup failed: %s",
+					mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
 		} else if (filename[0] == '\0') {
 			e_error(client->event,
@@ -656,14 +658,16 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 	if ((client->uidl_keymask & UIDL_GUID) != 0) {
 		if (mail_get_special(mail, MAIL_FETCH_GUID,
 				     &guid) < 0) {
-			e_error(client->event,
-				"UIDL: Message GUID lookup failed: %s",
-				mailbox_get_last_internal_error(mail->box, NULL));
+			if (!mail->expunged)
+				e_error(client->event,
+					"UIDL: Message GUID lookup failed: %s",
+					mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
 		} else if (guid[0] == '\0') {
-			e_error(client->event,
-				"UIDL: Message GUID not found "
-				"(pop3_uidl_format=%%{guid} not supported by storage?)");
+			if (!mail->expunged)
+				e_error(client->event,
+					"UIDL: Message GUID not found "
+					"(pop3_uidl_format=%%{guid} not supported by storage?)");
 			return -1;
 		}
 	}
@@ -729,8 +733,7 @@ list_uidls_saved_iter(struct client *client, struct cmd_uidl_context *ctx)
 static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 {
 	string_t *str;
-	bool permanent_uidl, found = FALSE;
-	bool failed = FALSE;
+	bool expunged_seen, failed, found, permanent_uidl = FALSE;
 
 	if (client->message_uidls != NULL)
 		return list_uidls_saved_iter(client, ctx);
@@ -753,6 +756,8 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 		str_truncate(str, 0);
 		if (pop3_get_uid(client, ctx->mail, str, &permanent_uidl) < 0) {
 			failed = TRUE;
+			if (ctx->mail->expunged)
+				expunged_seen = TRUE;
 			break;
 		}
 		if (client->set->pop3_save_uidl && !permanent_uidl)
@@ -777,8 +782,15 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 	if (ctx->list_all && !failed)
 		client_send_line(client, ".");
 	i_free(ctx);
-	if (failed)
-		client_disconnect(client, "POP3 UIDLs couldn't be listed");
+
+	if (failed) {
+		if (expunged_seen)
+			client_disconnect(client, "POP3 UIDLs couldn't be listed "
+					  "due to messages being currently expunged");
+		else
+			client_disconnect(client, "POP3 UIDLs couldn't be listed");
+	}
+
 	return found || failed;
 }
 
