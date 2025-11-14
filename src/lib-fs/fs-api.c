@@ -642,6 +642,15 @@ void fs_file_timing_end(struct fs_file *file, enum fs_op op)
 	if (!file->fs->enable_timing || file->timing_start[op].tv_sec == 0)
 		return;
 
+	if (op == FS_OP_WRITE && file->output != NULL &&
+	    file->output->stream_errno != 0) {
+		/* write stream has failed. the error has already been set,
+		   but we need to signal async-like failure to the caller
+		   to avoid it trying to finish the timing again. */
+		fs_file_set_error_async(file);
+		return;
+	}
+
 	fs_timing_end(&file->fs->stats.timings[op], &file->timing_start[op]);
 	/* don't count this again */
 	file->timing_start[op].tv_sec = 0;
