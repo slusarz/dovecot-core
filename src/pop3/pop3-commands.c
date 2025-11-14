@@ -481,7 +481,14 @@ static int fetch(struct client *client, unsigned int msgnum, uoff_t body_lines,
 	mail_set_seq(ctx->mail, msgnum_to_seq(client, msgnum));
 
 	if (mail_get_stream_because(ctx->mail, NULL, NULL, reason, &ctx->stream) < 0) {
-		ret = client_reply_msg_expunged(client, msgnum);
+		if (ctx->mail->expunged)
+			ret = client_reply_msg_expunged(client, msgnum);
+		else {
+			e_error(client->event, "Failed to get mail stream: %s",
+				mail_get_last_internal_error(ctx->mail, NULL));
+			client_send_line(client, "-ERR Internal error.");
+			ret = -1;
+		}
 		fetch_deinit(ctx);
 		return ret;
 	}
