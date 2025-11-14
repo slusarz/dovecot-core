@@ -93,7 +93,8 @@ common_sources = \
 	imap-status.c \
 	imap-state.c \
 	imap-sync.c \
-	imap-storage-callbacks.c
+	imap-storage-callbacks.c \
+	imap-append-hooks.c
 
 imap_SOURCES = \
 	$(common_sources) \
@@ -117,7 +118,8 @@ headers = \
 	imap-state.h \
 	imap-sync.h \
 	imap-sync-private.h \
-	imap-storage-callbacks.h
+	imap-storage-callbacks.h \
+	imap-append-hooks.h
 
 pkginc_libdir=$(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)

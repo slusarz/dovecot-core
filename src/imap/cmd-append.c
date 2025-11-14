@@ -16,6 +16,7 @@
 #include "imap-util.h"
 #include "imap-commands.h"
 #include "imap-msgpart-url.h"
+#include "imap-append-hooks.h"
 
 #include <sys/time.h>
 
@@ -748,6 +749,20 @@ cmd_append_handle_args(struct client_command_context *cmd,
 		i_stream_unref(&ctx->input);
 		ctx->input = input;
 	}
+
+	if (array_is_created(&imap_append_hooks)) {
+		const struct imap_append_hooks *const *p;
+		array_foreach(&imap_append_hooks, p) {
+			if ((*p)->imap_append_pre_save != NULL) {
+				if ((*p)->imap_append_pre_save(cmd, ctx->input) < 0) {
+					if (keywords != NULL)
+						mailbox_keywords_unref(&keywords);
+					return -1;
+				}
+			}
+		}
+	}
+
 
 	if (!ctx->failed) {
 		/* save the mail */

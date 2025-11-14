@@ -12,6 +12,7 @@ endif
 
 if HAVE_LUA
 MAIL_LUA = mail-lua
+IMAP_APPEND_SCAN_LUA = imap-append-scan-lua
 endif
 
 SUBDIRS = \
@@ -25,6 +26,7 @@ SUBDIRS = \
 	push-notification \
 	mail-log \
 	$(MAIL_LUA) \
+	$(IMAP_APPEND_SCAN_LUA) \
 	quota \
 	quota-clone \
 	imap-quota \
