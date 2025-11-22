@@ -73,3 +73,13 @@ doveadm_module_LTLIBRARIES = \
 
 lib20_doveadm_fts_plugin_la_SOURCES = \
 	doveadm-fts.c
+
+TESTS = test-fts-search-args
+check_PROGRAMS = test-fts-search-args
+
+test_fts_search_args_SOURCES = test-fts-search-args.c
+test_fts_search_args_LDADD = \
+	$(LIBDOVECOT_STORAGE) \
+	$(LIBDOVECOT) \
+	../../lib-language/libdovecot-language.la
+test_fts_search_args_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src/lib-test

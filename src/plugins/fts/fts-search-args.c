@@ -142,6 +142,30 @@ fts_backend_dovecot_tokenize_lang(struct language_user *user_lang,
 	if (and_arg->value.subargs == NULL) {
 		/* nothing was actually expanded, remove the empty and_arg */
 		or_arg->value.subargs = orig_or_args;
+	} else {
+		struct mail_search_arg *arg;
+		unsigned int count = 0;
+
+		/* count tokens */
+		for (arg = and_arg->value.subargs; arg != NULL; arg = arg->next)
+			count++;
+
+		if (count > 1) {
+			or_arg->phrase_all = TRUE;
+
+			/* mark the first token (which is the last one in the
+			   reversed list) and all tokens */
+			for (arg = and_arg->value.subargs; arg != NULL; arg = arg->next) {
+				struct mail_search_arg *sub;
+				bool first_token = arg->next == NULL;
+
+				for (sub = arg->value.subargs; sub != NULL; sub = sub->next) {
+					sub->phrase_token = TRUE;
+					if (first_token)
+						sub->phrase_first = TRUE;
+				}
+			}
+		}
 	}
 	return 0;
 }

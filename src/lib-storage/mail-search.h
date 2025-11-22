@@ -123,6 +123,9 @@ struct mail_search_arg {
 	bool nonmatch_always:1; /* result = 0 always */
 	bool fuzzy:1; /* use fuzzy matching for this arg */
 	bool no_fts:1; /* do NOT call FTS */
+	bool phrase_all:1; /* this arg contains the entire phrase */
+	bool phrase_first:1; /* this arg is the first token in a phrase */
+	bool phrase_token:1; /* this arg is part of a phrase */
 
 	int result; /* -1 = unknown, 0 = unmatched, 1 = matched */
 };
