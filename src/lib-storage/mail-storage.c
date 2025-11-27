@@ -26,6 +26,8 @@
 #include "mailbox-tree.h"
 #include "mailbox-list-private.h"
 #include "mail-storage-private.h"
+#include "message-part.h"
+#include "message-part-data.h"
 #include "mail-storage-service.h"
 #include "mail-storage-settings.h"
 #include "mail-namespace.h"
@@ -3656,6 +3658,70 @@ void mail_set_mail_cache_corrupted(struct mail *mail, const char *fmt, ...)
 	mailbox_set_index_error(mail->box);
 
 	va_end(va);
+}
+
+struct message_part *
+mail_find_first_text_mime_part(struct message_part *parts,
+			       const char **plain_content_type_r,
+			       const char **html_content_type_r)
+{
+	struct message_part_data *body_data = parts->data;
+	struct message_part *part;
+
+	i_assert(body_data != NULL);
+
+	if (body_data->content_type == NULL ||
+	    strcasecmp(body_data->content_type, "text") == 0) {
+		/* use any text/ part, even if we don't know what exactly
+		   it is. */
+		if (plain_content_type_r != NULL)
+			*plain_content_type_r = "text/plain";
+		return parts;
+	}
+	if (strcasecmp(body_data->content_type, "multipart") != 0) {
+		/* for now we support only text Content-Types */
+		return NULL;
+	}
+
+	if (strcasecmp(body_data->content_subtype, "alternative") == 0) {
+		/* text/plain > text/html > text/ */
+		struct message_part *html_part = NULL, *text_part = NULL;
+
+		for (part = parts->children; part != NULL; part = part->next) {
+			struct message_part_data *sub_body_data =
+				part->data;
+
+			i_assert(sub_body_data != NULL);
+
+			if (sub_body_data->content_type == NULL ||
+			    strcasecmp(sub_body_data->content_type, "text") == 0) {
+				if (sub_body_data->content_subtype == NULL ||
+				    strcasecmp(sub_body_data->content_subtype, "plain") == 0) {
+					if (plain_content_type_r != NULL)
+						*plain_content_type_r = "text/plain";
+					return part;
+				}
+				if (strcasecmp(sub_body_data->content_subtype, "html") == 0) {
+					if (html_content_type_r != NULL)
+						*html_content_type_r = "text/html";
+					html_part = part;
+				} else {
+					text_part = part;
+				}
+			}
+		}
+		return html_part != NULL ? html_part : text_part;
+	}
+	/* find the first usable MIME part */
+	for (part = parts->children; part != NULL; part = part->next) {
+		struct message_part *subpart =
+			mail_find_first_text_mime_part(part,
+						       plain_content_type_r,
+						       html_content_type_r);
+		if (subpart != NULL)
+			return subpart;
+	}
+	return NULL;
 }
 
 static int

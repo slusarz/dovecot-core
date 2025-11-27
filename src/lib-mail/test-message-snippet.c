@@ -1,11 +1,39 @@
 /* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
 
-#include "lib.h"
-#include "str.h"
-#include "istream.h"
-#include "unichar.h"
-#include "message-snippet.h"
+#include "mail-storage.h"
+#include "mail-user.h"
 #include "test-common.h"
+#include "message-snippet.h"
+#include "mailbox-private.h"
+
+static struct mail *test_mail_create(const char *input)
+{
+	struct mail_storage *storage;
+	struct mailbox *box;
+	struct mailbox_transaction_context *trans;
+	struct mail *mail;
+	pool_t pool;
+	const char *err = NULL;
+
+	pool = pool_alloconly_create("test mail", 1024);
+	storage = p_new(pool, struct mail_storage, 1);
+	box = p_new(pool, struct mailbox, 1);
+	trans = p_new(pool, struct mailbox_transaction_context, 1);
+
+	storage->set = mail_storage_settings_init(pool);
+
+	box->storage = storage;
+	box->pool = pool;
+	trans->box = box;
+	box->user = mail_user_alloc(NULL, storage->set, &err);
+
+	mail = mail_alloc(trans, 0, NULL);
+	mail_set_seq(mail, 1);
+
+	mail->box->input = i_stream_create_from_data(input, strlen(input));
+
+	return mail;
+}
 
 static const struct {
 	const char *input;
@@ -284,21 +312,16 @@ static const struct {
 static void test_message_snippet(void)
 {
 	string_t *str = t_str_new(128);
-	struct istream *input;
+	struct mail *mail;
 	unsigned int i;
 
 	test_begin("message snippet");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
-		input = test_istream_create(tests[i].input);
-		/* Limit the input max buffer size so the parsing uses multiple
-		   blocks. 45 = large enough to be able to read the Content-*
-		   headers. */
-		test_istream_set_max_buffer_size(input,
-			I_MIN(45, strlen(tests[i].input)));
-		test_assert_idx(message_snippet_generate(input, tests[i].max_snippet_chars, str) == 0, i);
+		mail = test_mail_create(tests[i].input);
+		test_assert_idx(message_snippet_generate(mail, tests[i].max_snippet_chars, str) == 0, i);
 		test_assert_strcmp_idx(tests[i].output, str_c(str), i);
-		i_stream_destroy(&input);
+		mail_free(&mail);
 	}
 	test_end();
 }
@@ -307,14 +330,14 @@ static void test_message_snippet_nuls(void)
 {
 	const char input_text[] = "\nfoo\0bar";
 	string_t *str = t_str_new(128);
-	struct istream *input;
+	struct mail *mail;
 
 	test_begin("message snippet with NULs");
 
-	input = i_stream_create_from_data(input_text, sizeof(input_text)-1);
-	test_assert(message_snippet_generate(input, 5, str) == 0);
+	mail = test_mail_create(input_text);
+	test_assert(message_snippet_generate(mail, 5, str) == 0);
 	test_assert_strcmp(str_c(str), "fooba");
-	i_stream_destroy(&input);
+	mail_free(&mail);
 	test_end();
 }
 

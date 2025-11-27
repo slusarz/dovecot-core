@@ -944,6 +944,11 @@ uint64_t mail_get_pvt_modseq(struct mail *mail);
 
 /* Returns message's MIME parts */
 int mail_get_parts(struct mail *mail, struct message_part **parts_r);
+/* Find the first text/plain or text/html MIME part from the message. */
+struct message_part *
+mail_find_first_text_mime_part(struct message_part *parts,
+			       const char **plain_content_type_r,
+			       const char **html_content_type_r);
 
 /* Get the Date-header of the mail. Timezone is in minutes. date=0 if it
    wasn't found or it was invalid. */

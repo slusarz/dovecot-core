@@ -1065,57 +1065,6 @@ static void index_mail_cache_dates(struct index_mail *mail)
 		(void)index_mail_cache_sent_date(mail);
 }
 
-static struct message_part *
-index_mail_find_first_text_mime_part(struct message_part *parts)
-{
-	struct message_part_data *body_data = parts->data;
-	struct message_part *part;
-
-	i_assert(body_data != NULL);
-
-	if (body_data->content_type == NULL ||
-	    strcasecmp(body_data->content_type, "text") == 0) {
-		/* use any text/ part, even if we don't know what exactly
-		   it is. */
-		return parts;
-	}
-	if (strcasecmp(body_data->content_type, "multipart") != 0) {
-		/* for now we support only text Content-Types */
-		return NULL;
-	}
-
-	if (strcasecmp(body_data->content_subtype, "alternative") == 0) {
-		/* text/plain > text/html > text/ */
-		struct message_part *html_part = NULL, *text_part = NULL;
-
-		for (part = parts->children; part != NULL; part = part->next) {
-			struct message_part_data *sub_body_data =
-				part->data;
-
-			i_assert(sub_body_data != NULL);
-
-			if (sub_body_data->content_type == NULL ||
-			    strcasecmp(sub_body_data->content_type, "text") == 0) {
-				if (sub_body_data->content_subtype == NULL ||
-				    strcasecmp(sub_body_data->content_subtype, "plain") == 0)
-					return part;
-				if (strcasecmp(sub_body_data->content_subtype, "html") == 0)
-					html_part = part;
-				else
-					text_part = part;
-			}
-		}
-		return html_part != NULL ? html_part : text_part;
-	}
-	/* find the first usable MIME part */
-	for (part = parts->children; part != NULL; part = part->next) {
-		struct message_part *subpart =
-			index_mail_find_first_text_mime_part(part);
-		if (subpart != NULL)
-			return subpart;
-	}
-	return NULL;
-}
 
 static int index_mail_write_body_snippet(struct index_mail *mail)
 {
@@ -1127,7 +1076,7 @@ static int index_mail_write_body_snippet(struct index_mail *mail)
 
 	i_assert(mail->data.parsed_bodystructure);
 
-	part = index_mail_find_first_text_mime_part(mail->data.parts);
+	part = mail_find_first_text_mime_part(mail->data.parts, NULL, NULL);
 	if (part == NULL) {
 		mail->data.body_snippet = BODY_SNIPPET_ALGO_V1;
 		return 0;
@@ -1139,18 +1088,11 @@ static int index_mail_write_body_snippet(struct index_mail *mail)
 		return -1;
 	i_assert(mail->data.stream != NULL);
 
-	i_stream_seek(input, part->physical_pos);
-	input = i_stream_create_limit(input, part->header_size.physical_size +
-				      part->body_size.physical_size);
-
 	str = str_new(mail->mail.data_pool, 128);
 	str_append(str, BODY_SNIPPET_ALGO_V1);
-	ret = message_snippet_generate(input, BODY_SNIPPET_MAX_CHARS, str);
+	ret = message_snippet_generate(&mail->mail.mail, BODY_SNIPPET_MAX_CHARS, str);
 	if (ret == 0)
 		mail->data.body_snippet = str_c(str);
-	i_stream_destroy(&input);
-
-	i_stream_seek(mail->data.stream, old_offset);
 	return ret;
 }
 

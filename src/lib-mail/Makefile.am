@@ -6,7 +6,11 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-charset \
-	-I$(top_srcdir)/src/lib-smtp
+	-I$(top_srcdir)/src/lib-smtp \
+	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-index
+	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-index
 
 libmail_la_SOURCES = \
 	istream-attachment-connector.c \
@@ -14,6 +18,7 @@ libmail_la_SOURCES = \
 	istream-binary-converter.c \
 	istream-dot.c \
 	istream-header-filter.c \
+	istream-message-body-extractor.c \
 	istream-qp-decoder.c \
 	istream-qp-encoder.c \
 	mail-html2text.c \
@@ -52,6 +57,7 @@ headers = \
 	istream-binary-converter.h \
 	istream-dot.h \
 	istream-header-filter.h \
+	istream-message-body-extractor.h \
 	istream-qp.h \
 	mbox-from.h \
 	mail-html2text.h \
@@ -87,6 +93,7 @@ test_programs = \
 	test-istream-attachment \
 	test-istream-binary-converter \
 	test-istream-header-filter \
+	test-istream-message-body-extractor \
 	test-istream-qp-decoder \
 	test-istream-qp-encoder \
 	test-mail-html2text \
@@ -246,7 +253,9 @@ test_message_size_LDADD = $(test_libs)
 test_message_size_DEPENDENCIES = $(test_deps)
 
 test_message_snippet_SOURCES = test-message-snippet.c
-test_message_snippet_LDADD = $(test_message_decoder_LDADD)
+test_message_snippet_LDADD = $(test_message_decoder_LDADD) \
+	../lib-storage/libstorage.la \
+	../lib-index/libindex.la
 test_message_snippet_DEPENDENCIES = $(test_deps)
 
 test_mail_html2text_SOURCES = test-mail-html2text.c
@@ -276,6 +285,10 @@ test_rfc2231_parser_DEPENDENCIES = $(test_deps)
 test_rfc822_parser_SOURCES = test-rfc822-parser.c
 test_rfc822_parser_LDADD = $(test_libs)
 test_rfc822_parser_DEPENDENCIES = $(test_deps)
+
+test_istream_message_body_extractor_SOURCES = test-istream-message-body-extractor.c
+test_istream_message_body_extractor_LDADD = $(test_libs)
+test_istream_message_body_extractor_DEPENDENCIES = $(test_deps)
 
 test_message_part_serialize_SOURCES = test-message-part-serialize.c
 test_message_part_serialize_LDADD = $(test_libs)
