@@ -37,6 +37,7 @@
 #include "mailbox-guid-cache.h"
 #include "mail-cache.h"
 #include "utc-mktime.h"
+#include "message-snippet-driver.h"
 
 #include <ctype.h>
 
@@ -92,6 +93,7 @@ void mail_storage_init(void)
 	mailbox_attributes_init();
 	mailbox_lists_init();
 	mail_storage_hooks_init();
+	message_snippet_driver_init();
 	i_array_init(&mail_storage_classes, 8);
 	mail_storage_register_all();
 	mailbox_list_register_all();
@@ -112,6 +114,7 @@ void mail_storage_deinit(void)
 	mail_search_mime_register_deinit();
 	if (array_is_created(&mail_storage_classes))
 		array_free(&mail_storage_classes);
+	message_snippet_driver_deinit();
 	mail_storage_hooks_deinit();
 	mailbox_lists_deinit();
 	mailbox_attributes_deinit();

@@ -83,6 +83,7 @@ struct mail_storage_settings {
 	bool mailbox_directory_name_legacy;
 	const char *mailbox_root_directory_name;
 	const char *mailbox_subscriptions_filename;
+	const char *mail_snippet_driver;
 	const char *mail_path;
 	const char *mail_inbox_path;
 	const char *mail_index_path;

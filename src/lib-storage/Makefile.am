@@ -53,6 +53,7 @@ libstorage_la_SOURCES = \
 	mail-storage-register.c \
 	mail-storage-service.c \
 	mail-storage-settings.c \
+	message-snippet-driver.c \
 	mail-thread.c \
 	mail-user.c \
 	mailbox-attribute.c \
@@ -93,6 +94,7 @@ headers = \
 	mail-storage-hooks.h \
 	mail-storage-service.h \
 	mail-storage-settings.h \
+	message-snippet-driver.h \
 	mail-user.h \
 	mailbox-attribute.h \
 	mailbox-attribute-internal.h \
