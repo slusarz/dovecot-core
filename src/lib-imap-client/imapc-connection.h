@@ -63,5 +63,6 @@ void imapc_connection_idle(struct imapc_connection *conn);
 struct event *imapc_connection_get_event(struct imapc_connection *conn);
 const char *
 imapc_connection_get_selected_mailbox_name(struct imapc_connection *conn);
+unsigned int imapc_connection_get_command_count(struct imapc_connection *conn);
 
 #endif

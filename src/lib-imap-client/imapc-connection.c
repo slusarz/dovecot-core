@@ -2680,3 +2680,9 @@ imapc_connection_get_selected_mailbox_name(struct imapc_connection *conn)
 {
 	return conn->selected_on_server;
 }
+
+unsigned int imapc_connection_get_command_count(struct imapc_connection *conn)
+{
+	return array_count(&conn->cmd_send_queue) +
+		array_count(&conn->cmd_wait_list);
+}

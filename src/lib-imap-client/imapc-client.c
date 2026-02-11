@@ -234,13 +234,46 @@ imapc_client_add_connection(struct imapc_client *client)
 static struct imapc_connection *
 imapc_client_find_connection(struct imapc_client *client)
 {
-	struct imapc_client_connection *const *connp;
+	struct imapc_client_connection *const *conns;
+	struct imapc_client_connection *best_conn;
+	unsigned int i, count;
+	enum imapc_connection_state state, best_state;
+	unsigned int cmd_count, best_cmd_count;
 
-	/* FIXME: stupid algorithm */
-	if (array_count(&client->conns) == 0)
+	conns = array_get(&client->conns, &count);
+	if (count == 0)
 		return imapc_client_add_connection(client)->conn;
-	connp = array_front(&client->conns);
-	return (*connp)->conn;
+
+	best_conn = conns[0];
+	best_state = imapc_connection_get_state(best_conn->conn);
+	best_cmd_count = imapc_connection_get_command_count(best_conn->conn);
+
+	for (i = 1; i < count; i++) {
+		state = imapc_connection_get_state(conns[i]->conn);
+		cmd_count = imapc_connection_get_command_count(conns[i]->conn);
+
+		if (state > best_state) {
+			/* Better state */
+			best_conn = conns[i];
+			best_state = state;
+			best_cmd_count = cmd_count;
+		} else if (state == best_state) {
+			/* Same state, prefer unboxed */
+			if (best_conn->box != NULL && conns[i]->box == NULL) {
+				best_conn = conns[i];
+				best_state = state;
+				best_cmd_count = cmd_count;
+			} else if (best_conn->box == NULL && conns[i]->box != NULL) {
+				/* Keep best_conn */
+			} else if (cmd_count < best_cmd_count) {
+				/* Same box status, prefer fewer commands */
+				best_conn = conns[i];
+				best_state = state;
+				best_cmd_count = cmd_count;
+			}
+		}
+	}
+	return best_conn->conn;
 }
 
 struct imapc_command *
