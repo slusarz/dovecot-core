@@ -2,9 +2,11 @@
 
 #include "lib.h"
 #include "ioloop.h"
+#include "hash.h"
 #include "settings.h"
 #include "mailbox-list-iter.h"
 #include "quota-private.h"
+#include "list/mailbox-list-index.h"
 
 struct count_quota_root {
 	struct quota_root root;
@@ -161,12 +163,80 @@ quota_mailbox_iter_next(struct quota_mailbox_iter *iter)
 	return quota_mailbox_iter_next(iter);
 }
 
+static int
+quota_count_index(struct quota_root *root, struct mail_namespace *ns,
+		  struct mailbox_list_index *ilist,
+		  uint64_t *bytes, uint64_t *count,
+		  enum quota_get_result *error_result_r,
+		  const char **error_r)
+{
+	struct mail_index_view *view;
+	const struct mail_index_record *rec;
+	const struct mailbox_list_index_record *irec;
+	struct mailbox_status status;
+	struct mailbox_index_vsize vsize;
+	const struct quota_root_settings *set = NULL;
+	const char *reason, *vname;
+	unsigned int seq, messages_count;
+	int ret = 0;
+
+	view = mail_index_view_open(ilist->index);
+	messages_count = mail_index_view_get_messages_count(view);
+
+	for (seq = 1; seq <= messages_count; seq++) {
+		if (ret < 0)
+			break;
+
+		rec = mail_index_lookup(view, seq);
+		if ((rec->flags & (MAILBOX_LIST_INDEX_FLAG_NONEXISTENT |
+				   MAILBOX_LIST_INDEX_FLAG_NOSELECT)) != 0)
+			continue;
+
+		mail_index_lookup_ext(view, seq, ilist->ext_id, (const void **)&irec, NULL);
+		if (irec == NULL)
+			continue;
+
+		vname = hash_table_lookup(ilist->mailbox_names,
+					  POINTER_CAST(irec->name_id));
+		if (vname == NULL)
+			continue;
+
+		if (settings_get_filter(ns->list->event, "quota", root->set_filter_name,
+					&quota_root_setting_parser_info, 0,
+					&set, error_r) < 0) {
+			*error_result_r = QUOTA_GET_RESULT_INTERNAL_ERROR;
+			ret = -1;
+		} else if (set->quota_ignore) {
+			/* ignore */
+		} else if (!mailbox_list_index_status(ns->list, view, seq,
+						      STATUS_MESSAGES, &status,
+						      NULL, &vsize, &reason)) {
+			*error_r = t_strdup_printf(
+				"Failed to get status for mailbox %s from index: %s",
+				vname, reason);
+			*error_result_r = QUOTA_GET_RESULT_INTERNAL_ERROR;
+			ret = -1;
+		} else {
+			*bytes += vsize.vsize;
+			*count += status.messages;
+		}
+		settings_free(set);
+	}
+	mail_index_view_close(&view);
+	return ret;
+}
+
 int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r,
 		enum quota_get_result *error_result_r, const char **error_r)
 {
-	struct quota_mailbox_iter *iter;
+	struct mail_namespace *const *namespaces;
+	struct mail_namespace *ns;
+	struct mailbox_list_iterate_context *iter;
+	struct mailbox_list_index *ilist;
+	struct mail_index *index;
 	const struct mailbox_info *info;
 	const char *error1 = "", *error2 = "";
+	unsigned int i, count;
 	int ret = 1;
 
 	*bytes_r = *count_r = 0;
@@ -176,19 +246,71 @@ int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r,
 
 	struct event_reason *reason = event_reason_begin("quota:count");
 
-	iter = quota_mailbox_iter_begin(root);
-	while ((info = quota_mailbox_iter_next(iter)) != NULL) {
-		if (quota_count_mailbox(root, info->ns, info->vname,
-					bytes_r, count_r, error_result_r,
-					&error1) < 0) {
-			ret = -1;
-			break;
+	namespaces = array_get(&root->namespaces, &count);
+	for (i = 0; i < count; i++) {
+		ns = namespaces[i];
+		ilist = NULL;
+
+		if ((ns->storage->class_flags & MAIL_STORAGE_CLASS_FLAG_NOQUOTA) != 0)
+			continue;
+
+		/* Try to use mailbox list index if available */
+		if (mailbox_list_index_get_index(ns->list, &index) &&
+		    mailbox_list_index_refresh(ns->list) == 0 &&
+		    (ilist = INDEX_LIST_CONTEXT(ns->list)) != NULL) {
+			if (quota_count_index(root, ns, ilist, bytes_r, count_r,
+					      error_result_r, &error1) < 0) {
+				ret = -1;
+				break;
+			}
+		} else {
+			/* Slow path */
+			iter = mailbox_list_iter_init(ns->list, "*",
+				MAILBOX_LIST_ITER_SKIP_ALIASES |
+				MAILBOX_LIST_ITER_RETURN_NO_FLAGS |
+				MAILBOX_LIST_ITER_NO_AUTO_BOXES);
+			while ((info = mailbox_list_iter_next(iter)) != NULL) {
+				if ((info->flags & (MAILBOX_NONEXISTENT |
+						    MAILBOX_NOSELECT)) != 0)
+					continue;
+
+				if (quota_count_mailbox(root, info->ns, info->vname,
+							bytes_r, count_r, error_result_r,
+							&error1) < 0) {
+					ret = -1;
+					break;
+				}
+			}
+			if (mailbox_list_iter_deinit(&iter) < 0) {
+				error2 = t_strdup_printf(
+					"Listing namespace %s failed: %s", ns->set->name,
+					mailbox_list_get_last_internal_error(ns->list, NULL));
+				*error_result_r = QUOTA_GET_RESULT_INTERNAL_ERROR;
+				ret = -1;
+			}
+			if (ret < 0)
+				break;
+		}
+
+		/* Check namespace prefix separately, as it might not be in the list */
+		if (ns->prefix_len > 0 &&
+		    (ns->prefix_len != 6 ||
+		     !str_begins_icase_with(ns->prefix, "INBOX"))) {
+			const char *vname = t_strndup(ns->prefix, ns->prefix_len-1);
+			/* Only if it wasn't already counted. If we used the index,
+			   we assume it covers all mailboxes including the prefix if
+			   it's a mailbox. */
+			if (ret == 0 && (ilist == NULL)) {
+				if (quota_count_mailbox(root, ns, vname,
+							bytes_r, count_r, error_result_r,
+							&error1) < 0) {
+					ret = -1;
+					break;
+				}
+			}
 		}
 	}
-	if (quota_mailbox_iter_deinit(&iter, &error2) < 0) {
-		*error_result_r = QUOTA_GET_RESULT_INTERNAL_ERROR;
-		ret = -1;
-	}
+
 	if (ret < 0) {
 		const char *separator =
 			*error1 != '\0' && *error2 != '\0' ? " and " : "";
