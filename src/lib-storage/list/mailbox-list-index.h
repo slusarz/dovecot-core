@@ -143,6 +143,8 @@ struct mailbox_list_index_iterate_context {
 	pool_t mailbox_pool;
 
 	struct mailbox_info info;
+	struct mailbox_status status;
+	struct mail_index_view *view;
 
 	size_t parent_len;
 	string_t *path;

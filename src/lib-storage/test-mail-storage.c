@@ -2,9 +2,11 @@
 
 #include "lib.h"
 #include "ioloop.h"
+#include "istream.h"
 #include "test-common.h"
 #include "test-dir.h"
 #include "master-service.h"
+#include "mailbox-list-iter.h"
 #include "test-mail-storage-common.h"
 
 static const struct test_globals {
@@ -726,6 +728,61 @@ static void test_mail_parse_human_timestamp_fail(void)
 	test_end();
 }
 
+static void test_mailbox_list_iter_status(void)
+{
+	struct test_mail_storage_ctx *ctx = test_mail_storage_init();
+	const char *const settings[] = {
+		"mailbox_list_index=yes",
+		"mailbox_list_index_include_inbox=yes",
+		NULL
+	};
+	struct test_mail_storage_settings set = {
+		.driver = "maildir",
+		.extra_input = settings,
+	};
+	test_mail_storage_init_user(ctx, &set);
+
+	test_begin("mailbox_list_iter_status");
+
+	/* Create mailbox */
+	struct mail_namespace *ns = ctx->user->namespaces;
+	struct mailbox *box = mailbox_alloc(ns->list, "INBOX", MAILBOX_FLAG_AUTO_CREATE | MAILBOX_FLAG_AUTO_SUBSCRIBE);
+	struct mailbox_transaction_context *t;
+	struct mail_save_context *save_ctx;
+
+	test_assert(mailbox_sync(box, 0) == 0);
+
+	/* Save a message to ensure status */
+	t = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_EXTERNAL, "test");
+	save_ctx = mailbox_save_alloc(t);
+	test_assert(mailbox_save_begin(&save_ctx, i_stream_create_from_data("From: foo\n\nbody", 15)) == 0);
+	test_assert(mailbox_save_finish(&save_ctx) == 0);
+	test_assert(mailbox_transaction_commit(&t) == 0);
+	mailbox_free(&box);
+
+	/* Iterate */
+	struct mailbox_list_iterate_context *iter = mailbox_list_iter_init(ns->list, "*", MAILBOX_LIST_ITER_RETURN_STATUS);
+	const struct mailbox_info *info;
+	bool found = FALSE;
+	while ((info = mailbox_list_iter_next(iter)) != NULL) {
+		if (strcmp(info->vname, "INBOX") == 0) {
+			found = TRUE;
+			if (info->status != NULL) {
+				test_assert(info->status->messages == 1);
+			} else {
+				test_assert(FALSE); /* Status should be returned */
+			}
+		}
+	}
+	mailbox_list_iter_deinit(&iter);
+	test_assert(found);
+
+	test_end();
+
+	test_mail_storage_deinit_user(ctx);
+	test_mail_storage_deinit(&ctx);
+}
+
 int main(int argc, char **argv)
 {
 	int ret;
@@ -738,6 +795,7 @@ int main(int argc, char **argv)
 		test_mail_parse_human_timestamp,
 		test_mail_parse_human_timestamp_time_interval,
 		test_mail_parse_human_timestamp_fail,
+		test_mailbox_list_iter_status,
 		NULL
 	};
 

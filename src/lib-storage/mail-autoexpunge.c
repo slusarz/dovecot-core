@@ -123,10 +123,12 @@ mailbox_autoexpunge_batch(struct mailbox *box,
 
 static int
 mailbox_autoexpunge(struct mailbox *box, unsigned int interval_time,
-		    unsigned int max_mails, unsigned int *expunged_count)
+		    unsigned int max_mails, unsigned int *expunged_count,
+		    const struct mailbox_status *status_cache)
 {
 	struct mailbox_metadata metadata;
-	struct mailbox_status status;
+	struct mailbox_status status_buf;
+	const struct mailbox_status *status;
 	time_t expire_time;
 	int ret;
 
@@ -137,17 +139,23 @@ mailbox_autoexpunge(struct mailbox *box, unsigned int interval_time,
 
 	/* first try to check quickly from mailbox list index if we should
 	   bother opening this mailbox. */
-	if (mailbox_get_status(box, STATUS_MESSAGES, &status) < 0) {
-		if (mailbox_get_last_mail_error(box) == MAIL_ERROR_NOTFOUND) {
-			/* autocreated mailbox doesn't exist yet */
-			return 0;
+	if (status_cache != NULL)
+		status = status_cache;
+	else {
+		if (mailbox_get_status(box, STATUS_MESSAGES, &status_buf) < 0) {
+			if (mailbox_get_last_mail_error(box) == MAIL_ERROR_NOTFOUND) {
+				/* autocreated mailbox doesn't exist yet */
+				return 0;
+			}
+			return -1;
 		}
-		return -1;
+		status = &status_buf;
 	}
-	if (interval_time == 0 && status.messages <= max_mails)
+
+	if (interval_time == 0 && status->messages <= max_mails)
 		return 0;
 
-	if (max_mails == 0 || status.messages <= max_mails) {
+	if (max_mails == 0 || status->messages <= max_mails) {
 		if (mailbox_get_metadata(box, MAILBOX_METADATA_FIRST_SAVE_DATE,
 					 &metadata) < 0)
 			return -1;
@@ -171,7 +179,8 @@ static void
 mailbox_autoexpunge_set(struct mail_namespace *ns, const char *vname,
 			unsigned int autoexpunge,
 			unsigned int autoexpunge_max_mails,
-			unsigned int *expunged_count)
+			unsigned int *expunged_count,
+			const struct mailbox_status *status_cache)
 {
 	struct mailbox *box;
 
@@ -180,7 +189,7 @@ mailbox_autoexpunge_set(struct mail_namespace *ns, const char *vname,
 	   the mailbox. */
 	box = mailbox_alloc(ns->list, vname, MAILBOX_FLAG_IGNORE_ACLS);
 	if (mailbox_autoexpunge(box, autoexpunge, autoexpunge_max_mails,
-				expunged_count) < 0) {
+				expunged_count, status_cache) < 0) {
 		e_error(box->event, "Failed to autoexpunge: %s",
 			mailbox_get_last_internal_error(box, NULL));
 	}
@@ -200,11 +209,15 @@ mailbox_autoexpunge_wildcards(struct mail_namespace *ns,
 	iter = mailbox_list_iter_init(ns->list, iter_name,
 				      MAILBOX_LIST_ITER_NO_AUTO_BOXES |
 				      MAILBOX_LIST_ITER_SKIP_ALIASES |
-				      MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
+				      MAILBOX_LIST_ITER_RETURN_STATUS);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) T_BEGIN {
+		if (info->status != NULL && set->autoexpunge == 0 &&
+		    info->status->messages <= set->autoexpunge_max_mails)
+			continue;
+
 		mailbox_autoexpunge_set(ns, info->vname, set->autoexpunge,
 					set->autoexpunge_max_mails,
-					expunged_count);
+					expunged_count, info->status);
 	} T_END;
 	if (mailbox_list_iter_deinit(&iter) < 0) {
 		e_error(mailbox_list_get_event(ns->list),
@@ -230,7 +243,7 @@ mailbox_autoexpunge_name(struct mail_namespace *ns,
 			vname = t_strconcat(ns->prefix, box_set->name, NULL);
 		mailbox_autoexpunge_set(ns, vname, box_set->autoexpunge,
 					box_set->autoexpunge_max_mails,
-					expunged_count);
+					expunged_count, NULL);
 	}
 }
 

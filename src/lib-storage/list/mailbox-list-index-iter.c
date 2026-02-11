@@ -56,6 +56,9 @@ mailbox_list_index_iter_init(struct mailbox_list *list,
 	ctx->next_node = ilist->mailbox_tree;
 	ctx->mailbox_pool = ilist->mailbox_pool;
 	pool_ref(ctx->mailbox_pool);
+
+	if ((flags & MAILBOX_LIST_ITER_RETURN_STATUS) != 0)
+		ctx->view = mail_index_view_open(ilist->index);
 	return &ctx->ctx;
 }
 
@@ -115,6 +118,20 @@ mailbox_list_index_update_info(struct mailbox_list_index_iterate_context *ctx)
 		ctx->info.flags |= MAILBOX_NOSELECT;
 	if ((node->flags & MAILBOX_LIST_INDEX_FLAG_NOINFERIORS) != 0)
 		ctx->info.flags |= MAILBOX_NOINFERIORS;
+
+	if ((ctx->ctx.flags & MAILBOX_LIST_ITER_RETURN_STATUS) != 0) {
+		uint32_t seq;
+		const char *reason;
+
+		i_zero(&ctx->status);
+		if (mail_index_lookup_seq(ctx->view, node->uid, &seq) &&
+		    mailbox_list_index_status(ctx->ctx.list, ctx->view, seq,
+					      STATUS_MESSAGES, &ctx->status,
+					      NULL, NULL, &reason))
+			ctx->info.status = &ctx->status;
+		else
+			ctx->info.status = NULL;
+	}
 
 	if ((ctx->ctx.flags & MAILBOX_LIST_ITER_RETURN_NO_FLAGS) == 0) {
 		box = mailbox_alloc(ctx->ctx.list, ctx->info.vname, 0);
@@ -225,6 +242,8 @@ int mailbox_list_index_iter_deinit(struct mailbox_list_iterate_context *_ctx)
 		(struct mailbox_list_index_iterate_context *)_ctx;
 	int ret = ctx->failed ? -1 : 0;
 
+	if (ctx->view != NULL)
+		mail_index_view_close(&ctx->view);
 	pool_unref(&ctx->mailbox_pool);
 	pool_unref(&_ctx->pool);
 	return ret;

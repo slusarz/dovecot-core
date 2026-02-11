@@ -4,6 +4,8 @@
 #include "mail-namespace.h"
 #include "mailbox-list.h"
 
+struct mailbox_status;
+
 enum mailbox_list_iter_flags {
 	/* Ignore index file and ACLs (used by ACL plugin internally) */
 	MAILBOX_LIST_ITER_RAW_LIST		= 0x000001,
@@ -42,6 +44,9 @@ enum mailbox_list_iter_flags {
 	/* This listing is done as part of a force resync */
 	MAILBOX_LIST_ITER_FORCE_RESYNC		= 0x010000,
 	MAILBOX_LIST_ITER_NO_RENAMING		= 0x020000,
+	/* Return mailbox status (e.g. message counts), if available cheaply.
+	   If not available, mailbox_info.status is NULL. */
+	MAILBOX_LIST_ITER_RETURN_STATUS		= 0x040000,
 };
 
 struct mailbox_info {
@@ -50,6 +55,7 @@ struct mailbox_info {
 	enum mailbox_info_flags flags;
 
 	struct mail_namespace *ns;
+	const struct mailbox_status *status;
 };
 
 /* Returns a single pattern from given reference and pattern. */
