@@ -86,7 +86,8 @@ noinst_HEADERS =\
 test_programs = \
 	test-sasl-oauth2 \
 	test-sasl-client \
-	test-sasl-authentication
+	test-sasl-authentication \
+	test-mech-otp-timing
 
 fuzz_programs =
 if USE_FUZZER
@@ -130,6 +131,11 @@ test_sasl_authentication_SOURCES = \
 	test-sasl-authentication.c
 test_sasl_authentication_LDADD = $(test_libs) $(LIBDOVECOT_TEST_LIBS)
 test_sasl_authentication_DEPENDENCIES = $(test_deps)
+
+test_mech_otp_timing_SOURCES = test-mech-otp-timing.c
+test_mech_otp_timing_LDADD = $(test_libs) $(LIBDOVECOT_TEST_LIBS)
+test_mech_otp_timing_DEPENDENCIES = $(test_deps)
+
 if HAVE_GSSAPI
 test_sasl_authentication_SOURCES += \
 	gssapi-dummy.c \
