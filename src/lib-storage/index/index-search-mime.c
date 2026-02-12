@@ -151,14 +151,36 @@ static int search_arg_mime_child_match(struct search_mimepart_context *mpctx,
 }
 
 static int
-search_arg_mime_substring_match(
-	struct search_mimepart_context *mpctx ATTR_UNUSED,
-	const char *key, const char *value)
+search_arg_mime_substring_match(struct search_mimepart_context *mpctx,
+				struct mail_search_mime_arg *arg,
+				const char *value)
 {
+	struct index_search_context *ictx = mpctx->index_ctx;
+	char *key;
+
 	if (value == NULL)
 		return 0;
 
-	/* FIXME: Normalization is required */
+	if (mpctx->buf == NULL)
+		mpctx->buf = str_new(default_pool, 256);
+
+	if (arg->context == NULL) {
+		str_truncate(mpctx->buf, 0);
+
+		if (ictx->mail_ctx.normalizer(arg->value.str,
+					      strlen(arg->value.str),
+					      mpctx->buf) < 0)
+			i_panic("search key not utf8: %s", arg->value.str);
+		key = i_strdup(str_c(mpctx->buf));
+		arg->context = (void *)key;
+	} else {
+		key = (char *)arg->context;
+	}
+
+	str_truncate(mpctx->buf, 0);
+	if (ictx->mail_ctx.normalizer(value, strlen(value), mpctx->buf) >= 0)
+		value = str_c(mpctx->buf);
+
 	return (strstr(value, key) != NULL ? 1 : 0);
 }
 
@@ -363,7 +385,7 @@ static int search_mime_arg_match(struct search_mimepart_context *mpctx,
 
 	case SEARCH_MIME_DESCRIPTION:
 		return search_arg_mime_substring_match(mpctx,
-			arg->value.str, data->content_description);
+			arg, data->content_description);
 	case SEARCH_MIME_DISPOSITION_TYPE:
 		return (data->content_disposition != NULL &&
 			strcasecmp(data->content_disposition,
@@ -423,17 +445,17 @@ static int search_mime_arg_match(struct search_mimepart_context *mpctx,
 		if (data->envelope == NULL)
 			return 0;
 		return search_arg_mime_substring_match(mpctx,
-			arg->value.str, data->envelope->subject);
+			arg, data->envelope->subject);
 	case SEARCH_MIME_IN_REPLY_TO:
 		if (data->envelope == NULL)
 			return 0;
 		return search_arg_mime_substring_match(mpctx,
-			arg->value.str, data->envelope->in_reply_to);
+			arg, data->envelope->in_reply_to);
 	case SEARCH_MIME_MESSAGE_ID:
 		if (data->envelope == NULL)
 			return 0;
 		return search_arg_mime_substring_match(mpctx,
-			arg->value.str, data->envelope->message_id);
+			arg, data->envelope->message_id);
 
 	case SEARCH_MIME_DEPTH_EQUAL:
 		return (mpctx->depth == arg->value.number ? 1 : 0);
@@ -592,6 +614,10 @@ search_mime_arg_deinit(struct mail_search_mime_arg *arg,
 		       struct search_mimepart_context *mpctx ATTR_UNUSED)
 {
 	switch (arg->type) {
+	case SEARCH_MIME_DESCRIPTION:
+	case SEARCH_MIME_SUBJECT:
+	case SEARCH_MIME_IN_REPLY_TO:
+	case SEARCH_MIME_MESSAGE_ID:
 	case SEARCH_MIME_FILENAME_IS:
 	case SEARCH_MIME_FILENAME_CONTAINS:
 	case SEARCH_MIME_FILENAME_BEGINS:
