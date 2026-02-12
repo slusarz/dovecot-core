@@ -889,9 +889,58 @@ static void connection_client_connect_failed(struct connection *conn)
 	connection_closed(conn, CONNECTION_DISCONNECT_CONN_CLOSED);
 }
 
+static void connection_client_connected_async(int fd, void *context)
+{
+	struct connection *conn = context;
+
+	conn->connect_ctx = NULL;
+
+	if (fd == -1) {
+		if (errno == 0)
+			errno = ETIMEDOUT;
+		conn->connect_failed_errno = errno;
+		conn->v.client_connected(conn, FALSE);
+		connection_closed(conn, CONNECTION_DISCONNECT_CONN_CLOSED);
+		return;
+	}
+
+	conn->fd_in = conn->fd_out = fd;
+	conn->connect_started = ioloop_timeval;
+	conn->disconnected = FALSE;
+
+	if (conn->list->set.delayed_unix_client_connected_callback) {
+		connection_update_properties(conn);
+		conn->io = io_add_to(conn->ioloop, conn->fd_out, IO_WRITE,
+				     connection_socket_connected, conn);
+		/* If we're retrying, we don't have a timeout for the write
+		   completion here. The connection timeout was for the connect()
+		   itself. Usually Unix socket writes don't block anyway. */
+	} else {
+		connection_client_connected(conn, TRUE);
+	}
+}
+
+static int connection_client_connect_unix_async(struct connection *conn,
+						unsigned int msecs)
+{
+	conn->connect_ctx = net_connect_unix_with_retries_async(
+		conn->base_name, msecs,
+		connection_client_connected_async, conn);
+	return 0;
+}
+
 int connection_client_connect_async(struct connection *conn)
 {
+	unsigned int msecs;
+
 	i_assert(conn->v.client_connected != NULL);
+
+	msecs = conn->list->set.unix_client_connect_msecs;
+	if (conn->remote_port == 0 && msecs > 0) {
+		if (connection_client_connect_unix_async(conn, msecs) < 0)
+			return -1;
+		return 0;
+	}
 
 	if (connection_client_connect(conn) < 0) {
 		i_assert(conn->to == NULL);
@@ -912,6 +961,9 @@ void connection_update_counters(struct connection *conn)
 
 void connection_disconnect(struct connection *conn)
 {
+	if (conn->connect_ctx != NULL)
+		net_connect_unix_async_abort(&conn->connect_ctx);
+
 	if (conn->disconnected)
 		return;
 	connection_update_counters(conn);

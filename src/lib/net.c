@@ -2,6 +2,7 @@
 
 #define _GNU_SOURCE /* For Linux's struct ucred */
 #include "lib.h"
+#include "ioloop.h"
 #include "time-util.h"
 #include "net.h"
 
@@ -365,6 +366,99 @@ int net_connect_unix_with_retries(const char *path, unsigned int msecs)
 		i_gettimeofday(&now);
 	} while (timeval_diff_msecs(&now, &start) < (int)msecs);
 	return fd;
+}
+
+struct net_connect_unix_async_ctx {
+	char *path;
+	unsigned int msecs;
+	struct timeval start_time;
+	net_connect_unix_callback_t *callback;
+	void *context;
+	struct timeout *to_retry;
+	int fd;
+};
+
+static void net_connect_unix_async_callback(struct net_connect_unix_async_ctx *ctx)
+{
+	int fd;
+	struct timeval now;
+
+	if (ctx->fd != -1) {
+		fd = ctx->fd;
+		/* Ownership transferred to callback */
+		ctx->fd = -1;
+	} else {
+		fd = net_connect_unix(ctx->path);
+	}
+
+	if (fd != -1 || (errno != EAGAIN && errno != ECONNREFUSED)) {
+		/* connected or fatal error */
+		net_connect_unix_callback_t *callback = ctx->callback;
+		void *context = ctx->context;
+		struct net_connect_unix_async_ctx *tmp_ctx = ctx;
+
+		net_connect_unix_async_abort(&tmp_ctx);
+		callback(fd, context);
+		return;
+	}
+
+	/* retry */
+	i_gettimeofday(&now);
+	if (timeval_diff_msecs(&now, &ctx->start_time) >= (int)ctx->msecs) {
+		/* timeout */
+		net_connect_unix_callback_t *callback = ctx->callback;
+		void *context = ctx->context;
+		struct net_connect_unix_async_ctx *tmp_ctx = ctx;
+
+		net_connect_unix_async_abort(&tmp_ctx);
+		callback(-1, context);
+		return;
+	}
+
+	/* reschedule retry */
+	timeout_remove(&ctx->to_retry);
+	ctx->to_retry = timeout_add(i_rand_minmax(10, 100), net_connect_unix_async_callback, ctx);
+}
+
+struct net_connect_unix_async_ctx *
+net_connect_unix_with_retries_async(const char *path, unsigned int msecs,
+				    net_connect_unix_callback_t *callback,
+				    void *context)
+{
+	struct net_connect_unix_async_ctx *ctx;
+	int fd;
+
+	ctx = i_new(struct net_connect_unix_async_ctx, 1);
+	ctx->path = i_strdup(path);
+	ctx->msecs = msecs;
+	ctx->callback = callback;
+	ctx->context = context;
+	ctx->fd = -1;
+	i_gettimeofday(&ctx->start_time);
+
+	/* try once first */
+	fd = net_connect_unix(path);
+	if (fd != -1 || (errno != EAGAIN && errno != ECONNREFUSED) || msecs == 0) {
+		/* Already done - schedule callback immediately */
+		ctx->fd = fd;
+		ctx->to_retry = timeout_add_short(0, net_connect_unix_async_callback, ctx);
+		return ctx;
+	}
+
+	/* Schedule first retry */
+	ctx->to_retry = timeout_add(i_rand_minmax(10, 100), net_connect_unix_async_callback, ctx);
+	return ctx;
+}
+
+void net_connect_unix_async_abort(struct net_connect_unix_async_ctx **ctx)
+{
+	if (*ctx == NULL) return;
+	timeout_remove(&(*ctx)->to_retry);
+	if ((*ctx)->fd != -1)
+		i_close_fd(&(*ctx)->fd);
+	i_free((*ctx)->path);
+	i_free(*ctx);
+	*ctx = NULL;
 }
 
 void net_disconnect(int fd)

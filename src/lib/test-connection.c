@@ -877,6 +877,68 @@ static void test_connection_output_throttle(void)
 
 /* END OUTPUT THROTTLE TEST */
 
+/* BEGIN ASYNC CONNECT TEST */
+
+static void test_connection_async_client_connected(struct connection *conn, bool success)
+{
+	test_assert(success);
+	io_loop_stop(conn->ioloop);
+}
+
+static const struct connection_vfuncs async_connect_v = {
+	.client_connected = test_connection_async_client_connected,
+	.destroy = test_connection_simple_destroy,
+};
+
+static const struct connection_settings async_connect_set = {
+	.service_name_in = "TEST",
+	.service_name_out = "TEST",
+	.unix_client_connect_msecs = 100, /* enable retries/async */
+	.client = TRUE,
+};
+
+static void test_connection_async_connect(void)
+{
+	test_begin("connection async connect");
+
+	struct ioloop *loop = io_loop_create();
+	const char *socket_path = "test-socket-async";
+	int fd_server;
+
+	/* Create listener */
+	i_unlink_if_exists(socket_path);
+	fd_server = net_listen_unix(socket_path, 10);
+	test_assert(fd_server != -1);
+
+	struct connection_list *list = connection_list_init(&async_connect_set, &async_connect_v);
+	struct connection *conn = i_new(struct connection, 1);
+	conn->ioloop = loop;
+
+	connection_init_client_unix(list, conn, socket_path);
+
+	/* Connect async */
+	test_assert(connection_client_connect_async(conn) == 0);
+
+	if (conn->fd_in == -1) {
+		/* Loop should stop when connected */
+		io_loop_run(loop);
+	}
+
+	test_assert(conn->fd_in != -1);
+
+	connection_deinit(conn);
+	connection_list_deinit(&list);
+	i_free(conn);
+
+	i_close_fd(&fd_server);
+	i_unlink(socket_path);
+	io_loop_destroy(&loop);
+
+	test_end();
+}
+
+/* END ASYNC CONNECT TEST */
+
 void test_connection(void)
 {
 	test_connection_simple();
@@ -895,4 +957,5 @@ void test_connection(void)
 	test_connection_no_version();
 	test_connection_is_valid_dns_name();
 	test_connection_output_throttle();
+	test_connection_async_connect();
 }

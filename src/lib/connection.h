@@ -188,6 +188,8 @@ struct connection {
 
 	/* Errno for connect() failure. */
 	int connect_failed_errno;
+	/* Async connect context */
+	struct net_connect_unix_async_ctx *connect_ctx;
 	/* Reason for disconnection */
 	enum connection_disconnect_reason disconnect_reason;
 

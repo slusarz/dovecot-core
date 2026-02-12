@@ -87,6 +87,24 @@ int net_connect_unix(const char *path);
 /* Try to connect to UNIX socket for give number of seconds when connect()
    returns EAGAIN or ECONNREFUSED. */
 int net_connect_unix_with_retries(const char *path, unsigned int msecs);
+
+/* Async connection callback. fd is the connected socket fd, or -1 on error. */
+typedef void net_connect_unix_callback_t(int fd, void *context);
+
+struct net_connect_unix_async_ctx;
+
+/* Try to connect to UNIX socket asynchronously. If the connection cannot be
+   established immediately due to EAGAIN/ECONNREFUSED, retries are attempted
+   for up to msecs milliseconds. The callback is called when connection succeeds
+   or fails permanently/times out. Returns context which can be used to abort
+   the connection attempt. */
+struct net_connect_unix_async_ctx *
+net_connect_unix_with_retries_async(const char *path, unsigned int msecs,
+				    net_connect_unix_callback_t *callback,
+				    void *context);
+/* Abort async connection attempt. The context is freed and set to NULL. */
+void net_connect_unix_async_abort(struct net_connect_unix_async_ctx **ctx);
+
 /* Disconnect socket */
 void net_disconnect(int fd);
 
