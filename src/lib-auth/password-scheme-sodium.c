@@ -50,10 +50,6 @@ generate_argon2id(const char *plaintext, const struct password_generate_params *
 	else
 		memlimit = crypto_pwhash_argon2id_MEMLIMIT_INTERACTIVE;
 
-	/* XXX: Bug in sodium-1.0.13, it expects rounds to be 3 */
-	if (rounds < 3)
-		rounds = 3;
-
 	if (crypto_pwhash_argon2id_str(result, plaintext, strlen(plaintext), rounds, memlimit) < 0)
 		i_fatal("crypto_pwhash_argon2id_str failed: %m");
 	*raw_password_r = (const unsigned char*)t_strdup(result);
