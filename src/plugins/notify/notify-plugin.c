@@ -8,6 +8,7 @@
 
 struct notify_mail_txn {
 	struct notify_mail_txn *prev, *next;
+	struct notify_context *ctx;
 	struct mailbox_transaction_context *parent_mailbox_txn;
 	struct mail *tmp_mail;
 	void *txn;
@@ -43,6 +44,7 @@ void notify_contexts_mail_transaction_begin(struct mailbox_transaction_context *
 
 	for (ctx = ctx_list; ctx != NULL; ctx = ctx->next) {
 		mail_txn = i_new(struct notify_mail_txn, 1);
+		mail_txn->ctx = ctx;
 		mail_txn->parent_mailbox_txn = t;
 		mail_txn->txn = ctx->v.mail_transaction_begin == NULL ? NULL :
 			ctx->v.mail_transaction_begin(t);
@@ -123,33 +125,77 @@ void notify_contexts_mail_update_keywords(struct mail *mail,
 	}
 }
 
-void notify_contexts_mail_transaction_commit(struct mailbox_transaction_context *t,
-					     struct mail_transaction_commit_changes *changes)
+void notify_contexts_mail_transaction_detach(struct mailbox_transaction_context *t,
+					     ARRAY_TYPE(notify_mail_txn) *mail_txns_r)
 {
 	struct notify_context *ctx;
 	struct notify_mail_txn *mail_txn;
 
+	i_array_init(mail_txns_r, 4);
 	for (ctx = ctx_list; ctx != NULL; ctx = ctx->next) {
-		mail_txn = notify_context_find_mail_txn(ctx, t);
+		mail_txn = ctx->mail_txn_list;
+		for (; mail_txn != NULL; mail_txn = mail_txn->next) {
+			if (mail_txn->parent_mailbox_txn == t) {
+				DLLIST_REMOVE(&ctx->mail_txn_list, mail_txn);
+				array_push_back(mail_txns_r, &mail_txn);
+				break;
+			}
+		}
+	}
+}
+
+void notify_contexts_mail_transaction_commit_detached(ARRAY_TYPE(notify_mail_txn) *mail_txns,
+						      struct mail_transaction_commit_changes *changes)
+{
+	struct notify_mail_txn *const *mail_txns_p;
+
+	if (!array_is_created(mail_txns))
+		return;
+
+	array_foreach(mail_txns, mail_txns_p) {
+		struct notify_mail_txn *mail_txn = *mail_txns_p;
+		struct notify_context *ctx = mail_txn->ctx;
+
 		if (ctx->v.mail_transaction_commit != NULL)
 			ctx->v.mail_transaction_commit(mail_txn->txn, changes);
-		DLLIST_REMOVE(&ctx->mail_txn_list, mail_txn);
 		i_free(mail_txn);
 	}
+	array_free(mail_txns);
+}
+
+void notify_contexts_mail_transaction_rollback_detached(ARRAY_TYPE(notify_mail_txn) *mail_txns)
+{
+	struct notify_mail_txn *const *mail_txns_p;
+
+	if (!array_is_created(mail_txns))
+		return;
+
+	array_foreach(mail_txns, mail_txns_p) {
+		struct notify_mail_txn *mail_txn = *mail_txns_p;
+		struct notify_context *ctx = mail_txn->ctx;
+
+		if (ctx->v.mail_transaction_rollback != NULL)
+			ctx->v.mail_transaction_rollback(mail_txn->txn);
+		i_free(mail_txn);
+	}
+	array_free(mail_txns);
+}
+
+void notify_contexts_mail_transaction_commit(struct mailbox_transaction_context *t,
+					     struct mail_transaction_commit_changes *changes)
+{
+	ARRAY_TYPE(notify_mail_txn) mail_txns;
+
+	notify_contexts_mail_transaction_detach(t, &mail_txns);
+	notify_contexts_mail_transaction_commit_detached(&mail_txns, changes);
 }
 
 void notify_contexts_mail_transaction_rollback(struct mailbox_transaction_context *t)
 {
-	struct notify_context *ctx;
-	struct notify_mail_txn *mail_txn;
+	ARRAY_TYPE(notify_mail_txn) mail_txns;
 
-	for (ctx = ctx_list; ctx != NULL; ctx = ctx->next) {
-		mail_txn = notify_context_find_mail_txn(ctx, t);
-		if (ctx->v.mail_transaction_rollback != NULL)
-			ctx->v.mail_transaction_rollback(mail_txn->txn);
-		DLLIST_REMOVE(&ctx->mail_txn_list, mail_txn);
-		i_free(mail_txn);
-	}
+	notify_contexts_mail_transaction_detach(t, &mail_txns);
+	notify_contexts_mail_transaction_rollback_detached(&mail_txns);
 }
 
 void notify_contexts_mailbox_create(struct mailbox *box)

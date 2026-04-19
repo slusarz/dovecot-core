@@ -1,7 +1,11 @@
 #ifndef NOTIFY_PLUGIN_PRIVATE_H
 #define NOTIFY_PLUGIN_PRIVATE_H
 
+#include "array.h"
 #include "notify-plugin.h"
+
+struct notify_mail_txn;
+ARRAY_DEFINE_TYPE(notify_mail_txn, struct notify_mail_txn *);
 
 void notify_contexts_mail_transaction_begin(struct mailbox_transaction_context *t);
 void notify_contexts_mail_save(struct mail *mail);
@@ -11,6 +15,13 @@ void notify_contexts_mail_update_flags(struct mail *mail,
 				       enum mail_flags old_flags);
 void notify_contexts_mail_update_keywords(struct mail *mail,
 					  const char *const *old_keywords);
+
+void notify_contexts_mail_transaction_detach(struct mailbox_transaction_context *t,
+					     ARRAY_TYPE(notify_mail_txn) *mail_txns_r);
+void notify_contexts_mail_transaction_commit_detached(ARRAY_TYPE(notify_mail_txn) *mail_txns,
+						      struct mail_transaction_commit_changes *changes);
+void notify_contexts_mail_transaction_rollback_detached(ARRAY_TYPE(notify_mail_txn) *mail_txns);
+
 void notify_contexts_mail_transaction_commit(struct mailbox_transaction_context *t,
 					     struct mail_transaction_commit_changes *changes);
 void notify_contexts_mail_transaction_rollback(struct mailbox_transaction_context *t);

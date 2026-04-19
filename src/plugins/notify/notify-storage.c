@@ -143,18 +143,21 @@ notify_transaction_commit(struct mailbox_transaction_context *t,
 			  struct mail_transaction_commit_changes *changes_r)
 {
 	union mailbox_module_context *lbox = NOTIFY_CONTEXT(t->box);
+	ARRAY_TYPE(notify_mail_txn) mail_txns;
 	bool no_notify = (t->flags & MAILBOX_TRANSACTION_FLAG_NO_NOTIFY) != 0;
+
+	i_zero(&mail_txns);
+	if (!no_notify)
+		notify_contexts_mail_transaction_detach(t, &mail_txns);
 
 	if ((lbox->super.transaction_commit(t, changes_r)) < 0) {
 		if (!no_notify)
-			notify_contexts_mail_transaction_rollback(t);
+			notify_contexts_mail_transaction_rollback_detached(&mail_txns);
 		return -1;
 	}
 
-	/* FIXME: note that t is already freed at this stage. it's not actually
-	   being dereferenced anymore though. still, a bit unsafe.. */
 	if (!no_notify)
-		notify_contexts_mail_transaction_commit(t, changes_r);
+		notify_contexts_mail_transaction_commit_detached(&mail_txns, changes_r);
 	return 0;
 }
 
@@ -162,10 +165,17 @@ static void
 notify_transaction_rollback(struct mailbox_transaction_context *t)
 {
 	union mailbox_module_context *lbox = NOTIFY_CONTEXT(t->box);
+	ARRAY_TYPE(notify_mail_txn) mail_txns;
+	bool no_notify = (t->flags & MAILBOX_TRANSACTION_FLAG_NO_NOTIFY) != 0;
 
-	if ((t->flags & MAILBOX_TRANSACTION_FLAG_NO_NOTIFY) == 0)
-		notify_contexts_mail_transaction_rollback(t);
+	i_zero(&mail_txns);
+	if (!no_notify)
+		notify_contexts_mail_transaction_detach(t, &mail_txns);
+
 	lbox->super.transaction_rollback(t);
+
+	if (!no_notify)
+		notify_contexts_mail_transaction_rollback_detached(&mail_txns);
 }
 
 static int
