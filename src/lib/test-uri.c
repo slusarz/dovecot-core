@@ -853,6 +853,46 @@ static void test_uri_iax(void)
 	test_end();
 }
 
+static void test_uri_parse_scheme(void)
+{
+	struct {
+		const char *input;
+		int expected_ret;
+		const char *expected_scheme;
+	} tests[] = {
+		{ "http:", 1, "http" },
+		{ "a:", 1, "a" },
+		{ "abc.def+ghi-jkl:", 1, "abc.def+ghi-jkl" },
+		{ "A123:", 1, "A123" },
+		{ "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789ab:", 1, "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789ab" },
+		{ "1abc:", 0, NULL },
+		{ "abc@def:", -1, NULL },
+		{ "abc_def:", -1, NULL },
+		{ "http", -1, NULL },
+		{ "a", -1, NULL },
+		{ "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789abc:", -1, NULL },
+		{ ":", 0, NULL },
+		{ "", 0, NULL }
+	};
+	unsigned int i;
+
+	test_begin("uri_parse_scheme()");
+	for (i = 0; i < N_ELEMENTS(tests); i++) T_BEGIN {
+		struct uri_parser parser;
+		const char *scheme = NULL;
+		int ret;
+
+		uri_parser_init(&parser, pool_datastack_create(), tests[i].input);
+		ret = uri_parse_scheme(&parser, &scheme);
+
+		test_out(t_strdup_printf("test %u: \"%s\"", i, tests[i].input),
+			 ret == tests[i].expected_ret);
+		if (ret > 0) {
+			test_assert(strcmp(scheme, tests[i].expected_scheme) == 0);
+		}
+	} T_END;
+	test_end();
+}
 
 void test_uri(void)
 {
@@ -862,4 +902,5 @@ void test_uri(void)
 	test_uri_escape();
 	test_uri_aaa();
 	test_uri_iax();
+	test_uri_parse_scheme();
 }
