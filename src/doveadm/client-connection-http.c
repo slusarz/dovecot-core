@@ -89,6 +89,36 @@ struct doveadm_http_server_mount {
 
 static void doveadm_http_server_send_response(struct client_request_http *req);
 
+static void
+doveadm_http_add_cors_headers(struct client_request_http *req,
+			      struct http_server_response *resp)
+{
+	struct client_connection_http *conn = req->conn;
+	const struct http_request *http_req =
+		http_server_request_get(req->http_request);
+	const char *origin = http_request_header_get(http_req, "Origin");
+	const char *const *allowed_origins;
+	bool allowed = FALSE;
+
+	if (origin == NULL)
+		return;
+
+	allowed_origins = settings_boollist_get(&conn->conn.set->doveadm_http_origins);
+	for (; *allowed_origins != NULL; allowed_origins++) {
+		if (strcmp(*allowed_origins, "*") == 0 ||
+		    strcmp(*allowed_origins, origin) == 0) {
+			allowed = TRUE;
+			break;
+		}
+	}
+
+	if (allowed) {
+		http_server_response_add_header(resp,
+			"Access-Control-Allow-Origin", origin);
+		http_server_response_add_header(resp, "Vary", "Origin");
+	}
+}
+
 /*
  * API
  */
@@ -821,8 +851,7 @@ doveadm_http_server_options_handler(struct client_request_http *req)
 	struct http_server_response *http_resp;
 
 	http_resp = http_server_response_create(http_sreq, 200, "OK");
-	http_server_response_add_header(http_resp,
-		"Access-Control-Allow-Origin", "*");
+	doveadm_http_add_cors_headers(req, http_resp);
 	http_server_response_add_header(http_resp,
 		"Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 	http_server_response_add_header(http_resp,
@@ -897,6 +926,7 @@ static void doveadm_http_server_send_response(struct client_request_http *req)
 	}
 
 	http_resp = http_server_response_create(http_sreq, 200, "OK");
+	doveadm_http_add_cors_headers(req, http_resp);
 	http_server_response_add_header(http_resp, "Content-Type",
 		"application/json; charset=utf-8");
 
